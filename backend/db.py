@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
 from backend.config import settings
@@ -23,6 +23,16 @@ engine = create_engine(
     settings.database_url,
     connect_args={"check_same_thread": False},  # SQLite 单文件,允许跨线程
 )
+
+
+@event.listens_for(engine, "connect")
+def _enable_sqlite_fk(dbapi_connection, connection_record):
+    """SQLite 默认不强制外键,每个连接都要开 PRAGMA foreign_keys=ON。"""
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
+
 SessionLocal = sessionmaker(bind=engine)
 
 
