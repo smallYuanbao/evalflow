@@ -16,6 +16,15 @@ def test_faithfulness_failure_returns_none(monkeypatch):
     assert evaluators.faithfulness("答", "证") is None
 
 
+def test_faithfulness_exception_returns_none(monkeypatch):
+    # judge 超时/抛异常 → 记 NULL(不算 run 失败)
+    def _boom(*a, **kw):
+        raise Exception("timeout")
+
+    monkeypatch.setattr(evaluators.llm, "chat_json", _boom)
+    assert evaluators.faithfulness("答", "证") is None
+
+
 def test_rejected_hits_marker():
     assert evaluators.rejected("抱歉，目前没有相关证据，我不清楚怎么处理。") == 1.0
 

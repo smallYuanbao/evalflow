@@ -1,5 +1,12 @@
+from datetime import datetime
+
 from sqlalchemy import Column, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, relationship
+
+
+def _now() -> str:
+    """created_at 默认时间戳:列表要按先后显示,不依赖 DB 端函数。"""
+    return datetime.now().isoformat(timespec="seconds")
 
 
 class Base(DeclarativeBase):
@@ -11,7 +18,8 @@ class Dataset(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String)
     description = Column(Text, default="")
-    created_at = Column(String)
+    created_at = Column(String, default=_now)
+    updated_at = Column(String, default=_now)  # 修改时间:加样本时刷新,列表按它倒序
     items = relationship("DatasetItem", back_populates="dataset")
 
 
@@ -31,7 +39,7 @@ class Run(Base):
     dataset_id = Column(Integer, ForeignKey("datasets.id"))
     status = Column(String, default="running")  # running / done / failed
     config = Column(Text, default="{}")         # 配置快照 JSON
-    created_at = Column(String)
+    created_at = Column(String, default=_now)
 
 
 class Trace(Base):
@@ -43,7 +51,7 @@ class Trace(Base):
     output = Column(Text)
     retrieved_context = Column(Text)   # 检索证据(忠实度要用)
     latency_ms = Column(Integer, default=0)
-    created_at = Column(String)
+    created_at = Column(String, default=_now)
 
 
 class Generation(Base):
@@ -63,4 +71,4 @@ class Score(Base):
     name = Column(String)                 # faithfulness / recall / ...
     value = Column(Float, nullable=True)  # NULL = 没评上(别记 0)
     comment = Column(Text, default="")
-    created_at = Column(String)
+    created_at = Column(String, default=_now)

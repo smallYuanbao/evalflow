@@ -4,7 +4,8 @@ from openai import OpenAI
 
 from backend.config import settings
 
-_client = OpenAI(api_key=settings.chat_api_key, base_url=settings.chat_base_url)
+_client = OpenAI(api_key=settings.chat_api_key, base_url=settings.chat_base_url,
+                 timeout=settings.chat_timeout)
 
 
 def chat(messages: list[dict], temperature: float = 0.0) -> str:
