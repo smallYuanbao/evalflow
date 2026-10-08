@@ -52,6 +52,7 @@ uv add --dev pytest pytest-asyncio httpx
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+pythonpath = ["."]
 ```
 
 - [ ] **Step 2: .gitignore 与 .env.example**
@@ -161,16 +162,41 @@ def test_health():
 - [ ] **Step 1: db.py**
 
 ```python
-from sqlalchemy import create_engine
+from pathlib import Path
+
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
 from backend.config import settings
 from backend.models import Base
 
+
+def _ensure_sqlite_dir(url: str) -> None:
+    """SQLite 不会自动建目录,data/ 不存在时连接会炸。这里在建 engine 前先建好。"""
+    if url.startswith("sqlite:///"):
+        db_path = url[len("sqlite:///"):]
+        if db_path and db_path != ":memory:":
+            parent = Path(db_path).parent
+            if str(parent) not in ("", "."):
+                parent.mkdir(parents=True, exist_ok=True)
+
+
+_ensure_sqlite_dir(settings.database_url)
+
 engine = create_engine(
     settings.database_url,
     connect_args={"check_same_thread": False},  # SQLite 单文件,允许跨线程
 )
+
+
+@event.listens_for(engine, "connect")
+def _enable_sqlite_fk(dbapi_connection, connection_record):
+    """SQLite 默认不强制外键,每个连接都要开 PRAGMA foreign_keys=ON。"""
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
+
 SessionLocal = sessionmaker(bind=engine)
 
 
@@ -254,9 +280,12 @@ class Score(Base):
 `tests/test_models.py`:
 
 ```python
-from backend.db import engine, init_db
-from backend.models import Score
+import pytest
 from sqlalchemy import inspect
+from sqlalchemy.exc import IntegrityError
+
+from backend.db import SessionLocal, engine, init_db
+from backend.models import DatasetItem
 
 
 def test_tables_created():
@@ -266,9 +295,21 @@ def test_tables_created():
 
 
 def test_score_value_nullable():
+    init_db()
     # 用 SQLAlchemy 反射确认 scores.value 可空
     cols = {c["name"]: c for c in inspect(engine).get_columns("scores")}
     assert cols["value"]["nullable"] is True
+
+
+def test_foreign_key_enforced():
+    init_db()
+    s = SessionLocal()
+    # dataset_id=99999 不存在,开 PRAGMA 后这条插入应当被外键拦住
+    s.add(DatasetItem(dataset_id=99999, input="孤儿样本", expected_output="", bucket="x"))
+    with pytest.raises(IntegrityError):
+        s.commit()
+    s.rollback()
+    s.close()
 ```
 
 运行 `uv run pytest` 通过,commit。
@@ -322,7 +363,7 @@ def test_run_pipeline_shape():
 - Create: `backend/seed.py`
 
 **Interfaces:**
-- `seed()`:插入 1 个 dataset + 5 条 item(带 bucket)+ 1 个 run + 2 条 trace + 几个 score(含一个 `value=None` 验证可空)。
+- `seed()`:插入 1 个 dataset + 3 条 item(带 bucket)+ 1 个 run + 2 条 trace + 几个 score(含一个 `value=None` 验证可空)。
 - 作为入口 `python -m backend.seed` 运行。
 
 - [ ] **Step 1: seed.py**
@@ -355,7 +396,7 @@ def seed() -> None:
     s.add(run)
     s.flush()
 
-    for it in items[:2]:
+    for i, it in enumerate(items[:2]):
         out = run_pipeline(it.input)
         tr = Trace(run_id=run.id, dataset_item_id=it.id,
                    input=it.input, output=out["output"],
@@ -363,7 +404,7 @@ def seed() -> None:
         s.add(tr)
         s.flush()
         s.add(Score(trace_id=tr.id, name="faithfulness", value=4.5, comment="mock"))
-        if it is items[0]:
+        if i == 0:
             # 验证 scores.value 可空:这条 judge 挂了,记 NULL 不记 0
             s.add(Score(trace_id=tr.id, name="recall", value=None, comment="judge 未评上"))
 
@@ -379,8 +420,16 @@ if __name__ == "__main__":
 
 ```bash
 uv run python -m backend.seed
-uv run python -c "from sqlalchemy import text; from backend.db import engine; \
-import sqlalchemy; print(sqlalchemy.inspect(engine).get_table_names())"
+uv run python -c "
+from backend.db import SessionLocal
+from backend.models import Dataset, DatasetItem, Run, Trace, Score
+s = SessionLocal()
+print('datasets/items/runs/traces/scores:',
+      s.query(Dataset).count(), s.query(DatasetItem).count(), s.query(Run).count(),
+      s.query(Trace).count(), s.query(Score).count())
+print('null-value scores:', s.query(Score).filter(Score.value.is_(None)).count())
+s.close()
+"
 ```
 
 用 SQL 确认:1 个 dataset、3 条 item、1 个 run、2 条 trace、score 关联正确,且有一条 `value IS NULL` 的 score。commit。

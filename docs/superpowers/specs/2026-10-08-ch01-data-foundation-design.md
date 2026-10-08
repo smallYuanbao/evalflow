@@ -84,6 +84,7 @@ runs ──1:N──▶ traces ──1:N──▶ scores
 
 **TDD(pytest,先红后绿):**
 - `models.py`:6 张表能建、外键关联正确
+- 外键强制:插孤儿样本(dataset_id 不存在)断言抛 `IntegrityError`(验证 `PRAGMA foreign_keys=ON` 真在拦)
 - `scores.value` 可空(插入 NULL 不报错)
 - `seed.py`:插入后数据完整、关联正确
 
@@ -110,3 +111,6 @@ runs ──1:N──▶ traces ──1:N──▶ scores
 | scores.value | 可空(NULL=没评上) | 0.0:区分「0 分」和「judge 挂了」,失败样本不污染分数 |
 | runs.config | 存 JSON 快照 | 只存 config 引用:对比「改提示词前后」需要每轮当时的配置 |
 | 密钥 | 本章不需要 | 管线 mock 不调真实模型;第 2 章接 judge 时再向用户要密钥 |
+| SQLite 外键 | connect 事件开 `PRAGMA foreign_keys=ON` | SQLite 默认不强制外键,DDL 声明 `ForeignKey` 运行时也不拦;配反向测试(插孤儿样本断言 `IntegrityError`)保证真在拦 |
+| 建表目录 | db.py 在建 engine 前自动 mkdir data/ | SQLite 不会自动建目录,相对路径 `data/eval.db` 目录不存在时连接直接 `unable to open database file` |
+| 测试导包 | pytest 配 `pythonpath=["."]` | `uv init --bare` 建应用型项目,pytest 默认只把 `tests/` 加进 sys.path,找不到 `backend` 包 |
