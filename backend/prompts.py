@@ -1,3 +1,9 @@
+# 版本标识:prompt 改动必须 bump 版本,保证历史 run 的 prompt 可追溯(Ch09 可复现)
+PROMPTS_VERSION = "v1"
+
+# pipeline 生成阶段的 system prompt(从 pipeline.py 迁入,统一在这里管版本)
+PIPELINE_SYSTEM_PROMPT = "你是育儿客服助手,只依据给定证据回答,证据没有就说不清楚。"
+
 FAITHFULNESS_PROMPT = """你是 RAG 评测裁判,判断「回答」是否忠实于「证据」:回答里每个论断都要能在证据里找到依据,不编造、不夸大。
 
 证据:

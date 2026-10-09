@@ -13,22 +13,15 @@ from backend.evaluators import (
 )
 from backend.models import DatasetItem, Run, Score, Trace
 from backend.pipeline import run_pipeline
+from backend.snapshot import config_top_k
 
 ABSENT_BUCKET = "库外"  # 库外题:知识库里没有答案,正确行为是拒答
-
-
-def _config_top_k(config_str: str) -> int:
-    """从 config 快照取 top_k(检索命中数),缺省/解析失败回退默认 2(兼容老 run 的空 config)。"""
-    try:
-        return int(json.loads(config_str or "{}").get("top_k", 2))
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return 2
 
 
 def execute_run(run_id: int) -> None:
     s = SessionLocal()
     run = s.get(Run, run_id)
-    top_k = _config_top_k(run.config)
+    top_k = config_top_k(run.config)
     items = s.query(DatasetItem).filter(DatasetItem.dataset_id == run.dataset_id).all()
     try:
         for it in items:

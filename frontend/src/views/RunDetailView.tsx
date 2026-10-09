@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Button, Card, Result, Select, Skeleton, Table, Tag } from 'antd'
+import { Button, Card, Descriptions, Result, Select, Skeleton, Table, Tag } from 'antd'
 import { api } from '../api'
 import { useRequest } from '../hooks/useRequest'
 import MetricCard from '../components/MetricCard'
@@ -19,12 +19,31 @@ const METRIC_LABELS: Record<string, string> = {
   rejection: '拒答率',
 }
 
+// 复现上下文快照(Ch09):config 里系统快照字段的形态
+type Snapshot = {
+  top_k?: number
+  knowledge_version?: string
+  knowledge_hash?: string
+  prompt_version?: string
+  chat_model?: string
+  embed_model?: string
+  dataset_hash?: string
+  item_count?: number
+}
+
 export default function RunDetailView() {
   const { runId } = useParams()
   const id = Number(runId)
   const { data: run, loading, error, reload } = useRequest((s) => api.getRun(id, s), [id])
   const { data: traces } = useRequest((s) => api.listTraces(id, s), [id])
   const [chartMetric, setChartMetric] = useState<string | null>(null)
+
+  // 复现上下文:解析 config 快照;老 run 缺字段显示 —
+  const cfg = useMemo<Snapshot>(() => {
+    try { return JSON.parse(run?.config || '{}') }
+    catch { return {} }
+  }, [run?.config])
+  const short = (v?: string) => (v ? v.slice(0, 8) : '—')
 
   if (loading) return <Skeleton active paragraph={{ rows: 8 }} />
   if (error)
@@ -49,6 +68,18 @@ export default function RunDetailView() {
       <h2>
         Run #{run.id} <Tag color="blue">{run.status}</Tag>
       </h2>
+      <Card title="复现上下文" style={{ marginBottom: 16 }}>
+        <Descriptions column={2} size="small">
+          <Descriptions.Item label="top_k">{cfg.top_k ?? '—'}</Descriptions.Item>
+          <Descriptions.Item label="知识库版本">{cfg.knowledge_version ?? '—'}</Descriptions.Item>
+          <Descriptions.Item label="知识库哈希">{short(cfg.knowledge_hash)}</Descriptions.Item>
+          <Descriptions.Item label="Prompt 版本">{cfg.prompt_version ?? '—'}</Descriptions.Item>
+          <Descriptions.Item label="生成模型">{cfg.chat_model || '—'}</Descriptions.Item>
+          <Descriptions.Item label="Embedding 模型">{cfg.embed_model || '—'}</Descriptions.Item>
+          <Descriptions.Item label="数据集哈希">{short(cfg.dataset_hash)}</Descriptions.Item>
+          <Descriptions.Item label="样本数">{cfg.item_count ?? '—'}</Descriptions.Item>
+        </Descriptions>
+      </Card>
       <Card style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
           {metricKeys.map((k) => (

@@ -9,6 +9,7 @@ from sqlalchemy import func
 from backend.db import SessionLocal, init_db
 from backend.models import Dataset, DatasetItem, Run, Score, Trace, _now
 from backend.run_service import execute_run
+from backend.snapshot import build_snapshot, config_top_k
 from backend.stats import aggregate_run
 
 
@@ -121,8 +122,11 @@ def get_dataset(dataset_id: int):
 
 @app.post("/runs")
 def create_run(body: RunIn, background: BackgroundTasks):
+    # 复现上下文:发起时快照 top_k + 知识库/prompt 版本 + 模型 + 数据集哈希,存进 config(Ch09)
+    config = build_snapshot(body.dataset_id, config_top_k(body.config))
     s = SessionLocal()
-    run = Run(dataset_id=body.dataset_id, status="running", config=body.config)
+    run = Run(dataset_id=body.dataset_id, status="running",
+              config=json.dumps(config, ensure_ascii=False))
     s.add(run)
     s.commit()
     s.refresh(run)

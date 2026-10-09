@@ -1,6 +1,10 @@
 # 多分类育儿知识库(Ch04 扩充:向量检索 + 散点图按 category 着色)
 # 每条 chunk 带 id(灌 ChromaDB 的唯一键)/ category(散点图着色)/ text(正文)
 # 注意:text 里的措辞要和 seed 的 expected_output 要点对齐,recall 是子串匹配
+
+# 知识库版本:改动 KNOWLEDGE 内容必须 bump,保证历史 run 的知识库可追溯(Ch09 可复现)
+KNOWLEDGE_VERSION = "v1"
+
 KNOWLEDGE = [
     # 发烧
     {"id": "fever-1", "category": "发烧", "text": "宝宝发烧38度以上可物理降温(温水擦浴);超过39度或持续不退要就医。"},

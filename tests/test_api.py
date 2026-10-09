@@ -1,3 +1,5 @@
+import json
+
 from fastapi.testclient import TestClient
 
 from backend.main import app
@@ -53,4 +55,7 @@ def test_list_runs_and_items(monkeypatch):
     assert ours_run["status"] in ("running", "done", "failed")
     assert ours_run["created_at"]  # 新 run 的 created_at 已补默认时间戳
     assert ours_run["dataset_name"] == "t"  # run 列表带评测集名称
-    assert ours_run["config"] == '{"top_k": 3}'  # 列表回看配置快照(Ch06)
+    cfg = json.loads(ours_run["config"])  # 列表回看复现上下文快照(Ch09)
+    assert cfg["top_k"] == 3
+    assert cfg["knowledge_version"] and cfg["prompt_version"]
+    assert cfg["dataset_hash"] and cfg["item_count"] == 1

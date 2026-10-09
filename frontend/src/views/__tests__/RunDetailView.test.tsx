@@ -70,3 +70,36 @@ test('指标全 NULL 时分桶图显示空态(不渲染图表)', async () => {
   )
   await waitFor(() => expect(screen.getByText('暂无分桶数据')).toBeInTheDocument())
 })
+
+test('展示复现上下文快照(Ch09)', async () => {
+  vi.mocked(api.getRun).mockResolvedValue({
+    id: 3,
+    dataset_id: 1,
+    status: 'done',
+    config: JSON.stringify({
+      top_k: 3,
+      knowledge_version: 'v1',
+      knowledge_hash: 'abcd1234efgh',
+      prompt_version: 'v1',
+      chat_model: 'deepseek-chat',
+      embed_model: 'bge-m3',
+      dataset_hash: '9876fedc5432',
+      item_count: 7,
+    }),
+    item_count: 7,
+    scores: { recall: 0.75 },
+    by_bucket: { 护理: { count: 1, recall: 0.75 } },
+  })
+  render(
+    <MemoryRouter initialEntries={['/runs/3']}>
+      <Routes>
+        <Route path="/runs/:runId" element={<RunDetailView />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  await waitFor(() => expect(screen.getByText('复现上下文')).toBeInTheDocument())
+  expect(screen.getByText('知识库版本')).toBeInTheDocument()
+  expect(screen.getByText('Prompt 版本')).toBeInTheDocument()
+  expect(screen.getByText('deepseek-chat')).toBeInTheDocument()
+  expect(screen.getByText('abcd1234')).toBeInTheDocument() // 知识库哈希截断前 8 位
+})
