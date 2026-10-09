@@ -58,7 +58,18 @@ export default function RunDetailView() {
           columns={[
             { title: '问题', dataIndex: 'input' },
             { title: '回答', dataIndex: 'output' },
-            { title: '证据', dataIndex: 'retrieved_context' },
+            {
+              title: '证据',
+              dataIndex: 'retrieval_hits',
+              render: (hits?: { text: string; score: number; rank: number }[]) =>
+                hits?.length
+                  ? hits.map((h) => (
+                      <div key={h.rank}>
+                        <Tag color="blue">#{h.rank} 相似度 {h.score}</Tag> {h.text}
+                      </div>
+                    ))
+                  : '—',
+            },
             { title: '耗时', dataIndex: 'latency_ms', render: (v: number) => `${v}ms` },
             {
               title: '分数',

@@ -6,6 +6,11 @@ export interface Dataset {
   updated_at?: string
 }
 
+export interface DatasetPage {
+  items: Dataset[]
+  total: number
+}
+
 export interface DatasetItem {
   id: number
   input: string
@@ -47,6 +52,26 @@ export interface TraceRow {
   input: string
   output: string
   retrieved_context: string
+  retrieval_hits?: { text: string; score: number; rank: number }[]
   latency_ms: number
   scores: { name: string; value: number | null }[]
+}
+
+export interface KnowledgeChunk {
+  id: string
+  text: string
+  category: string
+  x: number
+  y: number
+}
+
+export interface KnowledgeQuery {
+  input: string
+  x: number
+  y: number
+}
+
+export interface KnowledgeMap {
+  chunks: KnowledgeChunk[]
+  queries: KnowledgeQuery[]
 }

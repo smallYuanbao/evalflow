@@ -42,9 +42,12 @@ def init_db() -> None:
 
 
 def _migrate(engine) -> None:
-    """SQLite 的 create_all 不会给已存在的表加新列,这里补历史库缺的 updated_at。"""
+    """SQLite 的 create_all 不会给已存在的表加新列,这里补历史库缺的 updated_at / retrieval_hits。"""
     with engine.begin() as conn:
         cols = {c["name"] for c in inspect(conn).get_columns("datasets")}
         if "updated_at" not in cols:
             conn.execute(text("ALTER TABLE datasets ADD COLUMN updated_at VARCHAR"))
             conn.execute(text("UPDATE datasets SET updated_at = created_at WHERE updated_at IS NULL"))
+        tcols = {c["name"] for c in inspect(conn).get_columns("traces")}
+        if "retrieval_hits" not in tcols:
+            conn.execute(text("ALTER TABLE traces ADD COLUMN retrieval_hits VARCHAR DEFAULT '[]'"))

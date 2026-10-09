@@ -1,3 +1,5 @@
+import json
+
 from backend import run_service
 from backend.db import SessionLocal, init_db
 from backend.models import Dataset, DatasetItem, Run, Score, Trace
@@ -6,7 +8,8 @@ from backend.models import Dataset, DatasetItem, Run, Score, Trace
 def _seed_run(monkeypatch):
     monkeypatch.setattr(
         run_service, "run_pipeline",
-        lambda q: {"output": f"答:{q}", "retrieved_context": "物理降温 就医 用药"},
+        lambda q: {"output": f"答:{q}", "retrieved_context": "物理降温 就医 用药",
+                   "hits": [{"text": "物理降温", "score": 0.9}]},
     )
     monkeypatch.setattr(
         run_service, "faithfulness",
@@ -36,6 +39,8 @@ def test_execute_run_done(monkeypatch):
     tr = s.query(Trace).filter(Trace.run_id == rid).first()
     names = {sc.name for sc in s.query(Score).filter(Score.trace_id == tr.id)}
     assert names == {"recall", "faithfulness"}
+    hits = json.loads(tr.retrieval_hits)          # 检索命中已落库(JSON)
+    assert hits == [{"text": "物理降温", "score": 0.9, "rank": 1}]
     s.close()
 
 
@@ -56,7 +61,8 @@ def test_execute_run_absent_bucket(monkeypatch):
     # 库外题只评 rejection(不评 recall/faithfulness);普通题评 recall/faithfulness
     monkeypatch.setattr(
         run_service, "run_pipeline",
-        lambda q: {"output": "不清楚，没有相关证据。", "retrieved_context": "(无证据)"},
+        lambda q: {"output": "不清楚，没有相关证据。", "retrieved_context": "(无证据)",
+                   "hits": []},
     )
     monkeypatch.setattr(
         run_service, "faithfulness",

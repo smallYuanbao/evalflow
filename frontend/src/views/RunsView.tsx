@@ -13,7 +13,8 @@ const STATUS: Record<string, { color: string; text: string }> = {
 
 export default function RunsView() {
   const nav = useNavigate()
-  const { data: datasets } = useRequest((s) => api.listDatasets(s))
+  const [kw, setKw] = useState('')
+  const { data: datasets } = useRequest((s) => api.listDatasets({ page: 1, page_size: 20, search: kw }, s), [kw])
   const { data: runs, loading, error, reload } = useRequest((s) => api.listRuns(s))
   const [sel, setSel] = useState<number | null>(null)
 
@@ -40,10 +41,13 @@ export default function RunsView() {
     <Space direction="vertical" style={{ width: '100%' }} size="large">
       <Space>
         <Select
+          showSearch
+          onSearch={setKw}
+          filterOption={false} // 交给后端按名称模糊过滤,不用前端 filterOption
           placeholder="选评测集"
           style={{ width: 240 }}
           value={sel ?? undefined}
-          options={(datasets ?? []).map((d) => ({
+          options={(datasets?.items ?? []).map((d) => ({
             value: d.id,
             label: (d.item_count ?? 0) === 0 ? `${d.name}(空)` : d.name,
             disabled: (d.item_count ?? 0) === 0, // 空评测集发起评测没意义,置灰

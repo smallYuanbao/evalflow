@@ -15,7 +15,8 @@ def test_datasets_crud():
     did = r.json()["id"]
     r = client.post(f"/datasets/{did}/items", json={"input": "q", "expected_output": "a/b", "bucket": "x"})
     assert r.status_code == 200
-    assert client.get("/datasets").json()
+    page = client.get("/datasets").json()
+    assert "items" in page and "total" in page  # 后端分页:{items, total}
 
 
 def test_list_runs_and_items(monkeypatch):
@@ -24,7 +25,8 @@ def test_list_runs_and_items(monkeypatch):
     # 走 HTTP 触发 BackgroundTask 会调真实 LLM,这里 mock 掉生成 + judge(测的是接口,不是 LLM)
     monkeypatch.setattr(
         run_service, "run_pipeline",
-        lambda q: {"output": "答", "retrieved_context": "物理降温 就医 用药"},
+        lambda q: {"output": "答", "retrieved_context": "物理降温 就医 用药",
+                   "hits": [{"text": "物理降温", "score": 0.9}]},
     )
     monkeypatch.setattr(
         run_service, "faithfulness",
@@ -39,7 +41,7 @@ def test_list_runs_and_items(monkeypatch):
     items = client.get(f"/datasets/{did}/items").json()
     assert len(items) == 1 and items[0]["input"] == "q"
 
-    ours = next(d for d in client.get("/datasets").json() if d["id"] == did)
+    ours = next(d for d in client.get("/datasets").json()["items"] if d["id"] == did)
     assert ours["item_count"] == 1
     assert ours["updated_at"]  # 新评测集带修改时间(排序用)
     assert client.get(f"/datasets/{did}").json()["name"] == "t"  # 详情接口

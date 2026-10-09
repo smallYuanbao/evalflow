@@ -5,11 +5,16 @@ import DatasetsView from './views/DatasetsView'
 import RunsView from './views/RunsView'
 import RunDetailView from './views/RunDetailView'
 import DatasetDetailView from './views/DatasetDetailView'
+import KnowledgeMapView from './views/KnowledgeMapView'
 
 export default function App() {
   const location = useLocation()
   // 根据当前 URL 选中 tab,让浏览器前进/后退也能正确切换菜单(问题3)
-  const selectedKey = location.pathname.startsWith('/runs') ? 'runs' : 'datasets'
+  const selectedKey = location.pathname.startsWith('/runs')
+    ? 'runs'
+    : location.pathname.startsWith('/knowledge')
+      ? 'knowledge'
+      : 'datasets'
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Layout.Header>
@@ -19,6 +24,9 @@ export default function App() {
           </Menu.Item>
           <Menu.Item key="runs">
             <Link to="/runs">评测记录</Link>
+          </Menu.Item>
+          <Menu.Item key="knowledge">
+            <Link to="/knowledge">知识库</Link>
           </Menu.Item>
         </Menu>
       </Layout.Header>
@@ -30,6 +38,7 @@ export default function App() {
             <Route path="/datasets/:datasetId" element={<DatasetDetailView />} />
             <Route path="/runs" element={<RunsView />} />
             <Route path="/runs/:runId" element={<RunDetailView />} />
+            <Route path="/knowledge" element={<KnowledgeMapView />} />
           </Routes>
         </ErrorBoundary>
       </Layout.Content>

@@ -10,7 +10,7 @@ vi.mock('../../api', () => ({
 }))
 
 test('渲染评测集列表', async () => {
-  vi.mocked(api.listDatasets).mockResolvedValue([{ id: 1, name: '育儿', description: '', item_count: 7 }])
+  vi.mocked(api.listDatasets).mockResolvedValue({ items: [{ id: 1, name: '育儿', description: '', item_count: 7 }], total: 1 })
   render(
     <MemoryRouter>
       <DatasetsView />
@@ -30,7 +30,7 @@ test('加载失败显示错误兜底', async () => {
 })
 
 test('新建评测集名称为空时确认按钮禁用', async () => {
-  vi.mocked(api.listDatasets).mockResolvedValue([{ id: 1, name: '育儿', description: '', item_count: 7 }])
+  vi.mocked(api.listDatasets).mockResolvedValue({ items: [{ id: 1, name: '育儿', description: '', item_count: 7 }], total: 1 })
   render(
     <MemoryRouter>
       <DatasetsView />

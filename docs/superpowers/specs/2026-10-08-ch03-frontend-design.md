@@ -19,6 +19,7 @@ Ch03 把 Ch02 的评测能力做成可视化平台:浏览器里建评测集、�
 - 路由:react-router-dom(`/datasets`、`/runs`、`/runs/:id`)。
 - 组件库:antd v5(Table/Form/Modal/Statistic/Tag/Skeleton/Result/Empty/message 等)。
 - 图表:recharts(分桶条形图)——antd 不内置图表,recharts 生态最大、与 antd 常见搭配。
+- 请求库:axios(统一封装层,拦截器做参数注入 + 错误码兼容;替代手写 fetch 封装)。
 - 测试:Vitest + Testing Library(@testing-library/react + jest-dom + jsdom),mock api 模块。
 - 后端:复用 Ch02(FastAPI + SQLite),新增 CORS + 只读接口(含 dataset_name / 评测集详情)+ created_at / updated_at 时间戳。
 
@@ -30,7 +31,7 @@ Ch03 把 Ch02 的评测能力做成可视化平台:浏览器里建评测集、�
    │  CORS
    ▼
 FastAPI @8000
-   ├─ GET  /datasets ─────────── 评测集列表(含 item_count / updated_at,按 updated_at 倒序)
+   ├─ GET  /datasets ─────────── 评测集列表(后端分页 {items,total},含 item_count / updated_at,按 updated_at 倒序,支持 search)
    ├─ POST /datasets ─────────── 建评测集
    ├─ GET  /datasets/{id} ─────── 评测集详情(名称/描述/样本数,Ch03 新增)
    ├─ POST /datasets/{id}/items  加样本(顺带刷新 updated_at)
@@ -46,7 +47,7 @@ FastAPI @8000
 1. `GET /runs`:run 列表(倒序,含 dataset_id / dataset_name / status / created_at)。dataset_name 用一次 `IN` 查询回填,避免逐条查的 N+1。
 2. `GET /datasets/{id}/items`:某评测集的样本列表。
 3. `GET /datasets/{id}`:评测集详情(名称/描述/样本数);不存在返回 404(问题3 详情页需要)。
-4. `GET /datasets` 补 `item_count` 与 `updated_at`,并按 `updated_at DESC` 排序(问题1:按修改时间先后)。
+4. `GET /datasets` 补 `item_count` 与 `updated_at`,并按 `updated_at DESC` 排序(问题1:按修改时间先后);改为后端分页(参数 `page`/`page_size`/`search`,返回 `{items, total}`),`item_count` 用一次 `GROUP BY` 聚合,避免逐条 COUNT 的 N+1。
 5. `updated_at` 时间戳:Dataset 新增 `updated_at`,加样本时刷新(视为「修改」);SQLite 的 `create_all` 不会给已存在的表加列,`db.py` 加轻量迁移(ALTER + 回填 created_at)。
 6. CORS 中间件放行 `http://localhost:5173`。
 7. `created_at` 补默认时间戳(现为 NULL,列表要显示先后)。
@@ -64,7 +65,7 @@ frontend/
     main.tsx              # BrowserRouter 挂载 + antd reset.css
     App.tsx               # antd Layout + Menu + 路由表 + ErrorBoundary
     api/
-      client.ts           # 统一请求层(onRequest 参数注入 / onResponse 错误码兼容)
+      client.ts           # 统一请求层(axios 实例 + 拦截器:参数注入 / 错误码兼容)
       index.ts            # 类型化接口方法
     types.ts              # Dataset / DatasetItem / Run / RunDetail / Trace 类型
     hooks/
@@ -87,19 +88,19 @@ backend/
 
 ## 请求层封装(统一)
 
-所有接口走 `api/client.ts` 的 `request<T>()`,内置两个钩子:
+所有接口走 `api/client.ts` 的 `request<T>()`,底层是 **axios 实例 + 拦截器**,两个钩子变成两个拦截器:
 
-- **请求「前」钩子 `onRequest`**:统一参数注入(公共 header 等;鉴权 token / 请求 id 以后都在这加),各接口方法不再手写 header。
-- **请求「后」钩子 `onResponse`**:异常错误码兼容——`ok` 直接放行;非 `ok` 优先解析 FastAPI 的 `{"detail": "..."}`,再映射错误码(400/401/403/404/422/500)到友好文案,抛 `ApiError(status, message)`;网络层失败(断网/CORS/后端没起)抛 `ApiError(0, "网络异常")`。
+- **请求「前」钩子(request 拦截器)**:统一参数注入(公共 header 等;鉴权 token / 请求 id 以后都在这加),各接口方法不再手写 header。
+- **请求「后」钩子(response 拦截器)**:异常错误码兼容——2xx 直接放行;非 2xx 优先解析 FastAPI 的 `{"detail": "..."}`,再映射错误码(400/401/403/404/422/500)到友好文案,抛 `ApiError(status, message)`;主动取消(`ERR_CANCELED`)原样抛出;网络层失败(断网/CORS/后端没起)抛 `ApiError(0, "网络异常")`。
 
-- **请求取消**:`request` 透传 `AbortSignal`;`useRequest` 每次发起新请求前 abort 上一次(deps 变化 / 卸载),防慢响应覆盖新响应(stale response)。
+- **请求取消**:axios 的 `config.signal` 透传 `AbortSignal`;`useRequest` 每次发起新请求前 abort 上一次(deps 变化 / 卸载),防慢响应覆盖新响应(stale response)。
 
-好处:参数注入和错误处理只写一次;上层 `useRequest` 拿到带状态码的 `ApiError`,视图展示 `error.message` 即可,将来也可按 `status` 分支(如 401 跳登录)。
+好处:参数注入和错误处理只写一次(拦截器还能统一做超时/重试/鉴权刷新);POST 用 `data` 传体,axios 自动 `JSON.stringify`;上层 `useRequest` 拿到带状态码的 `ApiError`,视图展示 `error.message` 即可,将来也可按 `status` 分支(如 401 跳登录)。
 
 ## 接口契约(前端视角)
 
 ### GET /datasets
-`[{id, name, description, item_count, updated_at}]`,按 `updated_at` 倒序(最近修改在前)。
+`{items: [{id, name, description, item_count, updated_at}], total}` —— 后端分页。参数:`page`(默认 1)、`page_size`(默认 10)、`search`(按名称模糊过滤,供「发起评测」下拉远程搜索)。`items` 按 `updated_at` 倒序(最近修改在前);`total` 是过滤后的总数,前端据此渲染分页器。
 
 ### GET /datasets/{id}
 `{id, name, description, item_count}`;不存在 404 `{"detail": "评测集不存在"}`。
@@ -128,6 +129,8 @@ backend/
 - **加样本交互**:独立详情页 `/datasets/:datasetId`(问题3:相比「内容出现在表格下方」,跳转新页/弹窗更清晰)。详情页有返回按钮、加样本表单、样本列表。
 - **可点击区域可识别**:跳转入口用「操作」列的链接按钮(`查看`),不用整行 hover 点击(问题2:行可点但无视觉提示)。
 - **空评测集禁止发起评测**:发起评测下拉里,样本数为 0 的评测集置灰并标注 `(空)`(问题5)。
+- **后端分页**:评测集列表走 `GET /datasets` 的 `page`/`page_size` 后端分页(数据量大时前端分页要一次性拉全量,后端分页只取当前页)。
+- **下拉远程搜索**:发起评测的评测集下拉开启 `showSearch`,输入即用 `search` 参数请求后端模糊过滤(`filterOption={false}` 关闭前端过滤),数据量大时不必一次性下拉全量。
 - **分桶图空态**:所有分桶都没有 recall 数据时不渲染图表,改显示 `Empty`(问题6:无数据时 recharts 的 hover 高亮区会溢出坐标系)。
 - **表单校验**:新建评测集名称为空时「确定」禁用;加样本「问题」为空时按钮禁用——否则空值也能提交,产生空白行/空评测集。
 - **菜单与路由联动**:顶部 Menu 用 `useLocation` 派生的 `selectedKeys`,浏览器前进/后退也能正确切换 tab。
@@ -145,7 +148,7 @@ backend/
 | 测试 | Vitest + RTL,mock api 模块 | msw:demo 规模 vi.mock 够用,少一层依赖 |
 | 兜底 | useRequest 统一 loading/error/retry + ErrorBoundary | 各视图散写:重复且易漏,抽 hook 是标准做法 |
 | 后端补接口 | Ch03 顺带补 3 只读接口 + CORS + created_at | 前端硬凑:列表接口本来就该有,补上才是完整平台 |
-| 请求封装 | client.ts 统一 onRequest/onResponse 钩子 + ApiError + 错误码映射 | 各接口裸 fetch:参数注入和错误码处理散落重复,统一封装是标准做法 |
+| 请求封装 | client.ts 用 axios 实例 + 拦截器(参数注入 / 错误码映射)+ ApiError | 各接口裸 fetch:参数注入和错误码处理散落重复;axios 拦截器还能统一超时/取消/重试,比手写 fetch 封装更标准 |
 | 请求取消 | useRequest 用 AbortController 打断上次请求 | 不取消:慢响应覆盖新响应(stale),卸载后 setState 也是隐患 |
 | LLM 超时 | 后端 config.chat_timeout(默认 60s) | 不设超时:DeepSeek 卡住 run 永久 running,前端轮询永远等不到 done |
 | 评测集排序 | 按 `updated_at` 倒序,加样本刷新它 | 按 id/创建时间:用户要求按修改时间先后(问题1) |
@@ -154,7 +157,11 @@ backend/
 | 空评测集 | 发起评测下拉置灰 + 标 `(空)` | 可点:空集跑评测无意义(问题5) |
 | 分桶图空态 | 全空时渲染 antd Empty | recharts 空数据:无数据 hover 高亮区溢出坐标系(问题6) |
 | 表单校验 | 关键字段为空时禁用提交按钮(前端校验) | 空值也能提交:产生空白行/空评测集 |
+| 评测集列表分页 | `GET /datasets` 后端分页(page/page_size,返回 {items,total}) | 前端分页:数据量大时一次性拉全量,接口慢且内存高;后端分页只取当前页 |
+| 列表 count 聚合 | item_count 用一次 `GROUP BY` 聚合 | 逐条 COUNT:列表 N 行就 N 次查询(N+1),数据量大明显慢 |
+| 发起评测下拉 | 远程搜索(showSearch + search 参数 + filterOption=false) | 一次性下拉全量:数据量大时下拉卡、内存高 |
 | 菜单高亮 | Menu 用 useLocation 派生的 selectedKeys | defaultSelectedKeys 只认初始路由,后退不联动 |
+| StrictMode | 不用(去掉) | 开发模式双跑 effect,useRequest 每次挂载「发→取消→再发」,切换 tab 时 Network 出现大量无谓 canceled(问题1);生产模式本就无双跑,去掉更贴近真实 |
 
 ## 本章不做
 

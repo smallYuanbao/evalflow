@@ -1,8 +1,10 @@
+import json
 from contextlib import asynccontextmanager
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from sqlalchemy import func
 
 from backend.db import SessionLocal, init_db
 from backend.models import Dataset, DatasetItem, Run, Score, Trace, _now
@@ -84,15 +86,25 @@ def list_items(dataset_id: int):
 
 
 @app.get("/datasets")
-def list_datasets():
+def list_datasets(page: int = 1, page_size: int = 10, search: str = ""):
+    """评测集列表(后端分页)。search 按名称模糊过滤,供「发起评测」下拉远程搜索。"""
     s = SessionLocal()
-    ds = s.query(Dataset).order_by(Dataset.updated_at.desc()).all()
-    out = [{"id": d.id, "name": d.name, "description": d.description,
-            "item_count": s.query(DatasetItem).filter(DatasetItem.dataset_id == d.id).count(),
-            "updated_at": d.updated_at}
-           for d in ds]
+    q = s.query(Dataset)
+    if search:
+        q = q.filter(Dataset.name.contains(search))
+    total = q.count()
+    ds = q.order_by(Dataset.updated_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    # 一次 GROUP BY 聚合样本数,避免逐条 count 的 N+1
+    counts = dict(
+        s.query(DatasetItem.dataset_id, func.count(DatasetItem.id))
+         .filter(DatasetItem.dataset_id.in_([d.id for d in ds]))
+         .group_by(DatasetItem.dataset_id).all()
+    ) if ds else {}
+    items = [{"id": d.id, "name": d.name, "description": d.description,
+              "item_count": counts.get(d.id, 0), "updated_at": d.updated_at}
+             for d in ds]
     s.close()
-    return out
+    return {"items": items, "total": total}
 
 
 @app.get("/datasets/{dataset_id}")
@@ -148,6 +160,34 @@ def list_traces(run_id: int):
                for sc in s.query(Score).filter(Score.trace_id == tr.id)]
         out.append({"trace_id": tr.id, "input": tr.input, "output": tr.output,
                     "retrieved_context": tr.retrieved_context,
+                    "retrieval_hits": json.loads(tr.retrieval_hits or "[]"),
                     "latency_ms": tr.latency_ms, "scores": scs})
     s.close()
     return out
+
+
+@app.get("/knowledge/map")
+def knowledge_map():
+    """知识库可视化:知识块拟合 PCA 基底,样本问题投影到同一 2D 坐标系。"""
+    from backend.embedding import embed
+    from backend.knowledge import KNOWLEDGE
+    from backend.pca import fit_pca, project
+
+    s = SessionLocal()
+    inputs = [it.input for it in s.query(DatasetItem).all()]
+    s.close()
+
+    chunk_texts = [k["text"] for k in KNOWLEDGE]
+    chunk_vecs = embed(chunk_texts)
+    mean, basis = fit_pca(chunk_vecs)
+    chunk_pts = project(chunk_vecs, mean, basis)
+    query_pts = project(embed(inputs), mean, basis) if inputs else []
+
+    chunks = [{"id": KNOWLEDGE[i]["id"], "text": KNOWLEDGE[i]["text"],
+               "category": KNOWLEDGE[i]["category"],
+               "x": round(chunk_pts[i][0], 4), "y": round(chunk_pts[i][1], 4)}
+              for i in range(len(chunk_texts))]
+    queries = [{"input": inputs[j],
+                "x": round(query_pts[j][0], 4), "y": round(query_pts[j][1], 4)}
+               for j in range(len(inputs))]
+    return {"chunks": chunks, "queries": queries}

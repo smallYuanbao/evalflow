@@ -1,3 +1,4 @@
+import json
 import time
 
 from backend.db import SessionLocal
@@ -17,9 +18,13 @@ def execute_run(run_id: int) -> None:
             t0 = time.time()
             out = run_pipeline(it.input)
             latency_ms = int((time.time() - t0) * 1000)
+            hits = [{"text": h["text"], "score": h["score"], "rank": i + 1}
+                    for i, h in enumerate(out["hits"])]
             tr = Trace(run_id=run.id, dataset_item_id=it.id,
                        input=it.input, output=out["output"],
-                       retrieved_context=out["retrieved_context"], latency_ms=latency_ms)
+                       retrieved_context=out["retrieved_context"],
+                       retrieval_hits=json.dumps(hits, ensure_ascii=False),
+                       latency_ms=latency_ms)
             s.add(tr)
             s.flush()
             if it.bucket == ABSENT_BUCKET:

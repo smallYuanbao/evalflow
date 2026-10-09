@@ -7,17 +7,22 @@ import type { Dataset } from '../types'
 
 export default function DatasetsView() {
   const nav = useNavigate()
-  const { data, loading, error, reload } = useRequest((s) => api.listDatasets(s))
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const { data, loading, error, reload } = useRequest(
+    (s) => api.listDatasets({ page, page_size: pageSize }, s),
+    [page, pageSize],
+  )
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
 
-  if (loading) return <Skeleton active paragraph={{ rows: 6 }} />
   if (error)
     return (
       <Result status="error" title="加载失败" subTitle={error} extra={<Button onClick={reload}>重试</Button>} />
     )
-  if (!data?.length) return <Empty description="还没有评测集" />
+  if (loading && !data) return <Skeleton active paragraph={{ rows: 6 }} />
+  if (!data?.items.length) return <Empty description="还没有评测集" />
 
   const create = async () => {
     if (!name.trim()) return // 名称为空不允许新建
@@ -26,7 +31,8 @@ export default function DatasetsView() {
     setName('')
     setDesc('')
     message.success('已创建')
-    reload()
+    setPage(1) // 新建的 updated_at 最新,排第一页;回第一页能看到
+    if (page === 1) reload() // 已在第一页时 setPage 不触发重载,手动刷新
   }
 
   return (
@@ -36,7 +42,18 @@ export default function DatasetsView() {
       </Button>
       <Table
         rowKey="id"
-        dataSource={data}
+        loading={loading}
+        dataSource={data.items}
+        pagination={{
+          current: page,
+          pageSize,
+          total: data.total,
+          showSizeChanger: true,
+          onChange: (p, ps) => {
+            setPage(p)
+            setPageSize(ps)
+          },
+        }}
         columns={[
           { title: '名称', dataIndex: 'name' },
           { title: '描述', dataIndex: 'description' },

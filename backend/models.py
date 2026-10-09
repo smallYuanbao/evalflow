@@ -50,6 +50,7 @@ class Trace(Base):
     input = Column(Text)
     output = Column(Text)
     retrieved_context = Column(Text)   # 检索证据(忠实度要用)
+    retrieval_hits = Column(Text, default="[]")  # 检索命中 JSON:[{text, score, rank}]
     latency_ms = Column(Integer, default=0)
     created_at = Column(String, default=_now)
 
