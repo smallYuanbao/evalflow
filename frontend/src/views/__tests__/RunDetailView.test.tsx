@@ -48,6 +48,7 @@ test('展示多维指标(动态渲染卡片 + 分桶列)', async () => {
   expect(screen.getAllByText('上下文精度').length).toBeGreaterThan(0)
   expect(screen.getAllByText('答案正确性').length).toBeGreaterThan(0)
   expect(screen.queryByText('拒答率')).not.toBeInTheDocument() // 库内 run 没评拒答
+  expect(screen.getByRole('combobox')).toBeInTheDocument() // 分桶图指标切换下拉(Ch07)
 })
 
 test('指标全 NULL 时分桶图显示空态(不渲染图表)', async () => {

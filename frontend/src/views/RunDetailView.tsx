@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Button, Card, Result, Skeleton, Table, Tag } from 'antd'
+import { Button, Card, Result, Select, Skeleton, Table, Tag } from 'antd'
 import { api } from '../api'
 import { useRequest } from '../hooks/useRequest'
 import MetricCard from '../components/MetricCard'
@@ -23,6 +24,7 @@ export default function RunDetailView() {
   const id = Number(runId)
   const { data: run, loading, error, reload } = useRequest((s) => api.getRun(id, s), [id])
   const { data: traces } = useRequest((s) => api.listTraces(id, s), [id])
+  const [chartMetric, setChartMetric] = useState<string | null>(null)
 
   if (loading) return <Skeleton active paragraph={{ rows: 8 }} />
   if (error)
@@ -32,11 +34,13 @@ export default function RunDetailView() {
   if (!run) return null
 
   const metricKeys = Object.keys(run.scores)
-  // 柱状图默认画「召回(机械)」,没有则画第一个出现的指标;一个都没有则空态
-  const chartMetric = metricKeys.includes('recall') ? 'recall' : metricKeys[0]
+  // 柱状图指标:用户选过且当前 run 有 → 尊重选择;否则默认 recall,没有则第一个(与 Ch05 回退一致)
+  const effective = chartMetric && metricKeys.includes(chartMetric)
+    ? chartMetric
+    : metricKeys.includes('recall') ? 'recall' : metricKeys[0]
   const bucketData = Object.entries(run.by_bucket).map(([name, s]) => ({
     name,
-    recall: chartMetric ? (s[chartMetric] ?? null) : null,
+    value: effective ? (s[effective] ?? null) : null,
   }))
   const bucketRows = Object.entries(run.by_bucket).map(([name, s]) => ({ name, ...s }))
 
@@ -52,7 +56,19 @@ export default function RunDetailView() {
           ))}
         </div>
       </Card>
-      <Card title="分桶聚合" style={{ marginBottom: 16 }}>
+      <Card
+        title="分桶聚合"
+        extra={
+          <Select
+            size="small"
+            style={{ width: 180 }}
+            value={effective}
+            onChange={setChartMetric}
+            options={metricKeys.map((k) => ({ value: k, label: METRIC_LABELS[k] ?? k }))}
+          />
+        }
+        style={{ marginBottom: 16 }}
+      >
         <BucketChart data={bucketData} />
         <Table
           rowKey="name"
