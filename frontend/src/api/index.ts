@@ -18,8 +18,8 @@ export const api = {
   getDataset: (id: number, signal?: AbortSignal) => request<Dataset>(`/datasets/${id}`, { signal }),
   addItem: (id: number, body: { input: string; expected_output: string; bucket: string }) =>
     request<DatasetItem>(`/datasets/${id}/items`, { method: 'POST', data: body }),
-  createRun: (dataset_id: number) =>
-    request<Run>('/runs', { method: 'POST', data: { dataset_id, config: '{}' } }),
+  createRun: (dataset_id: number, config?: { top_k?: number }) =>
+    request<Run>('/runs', { method: 'POST', data: { dataset_id, config: JSON.stringify(config ?? {}) } }),
   listRuns: (signal?: AbortSignal) => request<Run[]>('/runs', { signal }),
   getRun: (id: number, signal?: AbortSignal) => request<RunDetail>(`/runs/${id}`, { signal }),
   listTraces: (id: number, signal?: AbortSignal) => request<TraceRow[]>(`/runs/${id}/traces`, { signal }),

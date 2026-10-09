@@ -23,6 +23,7 @@ def test_aggregate_by_bucket():
     s.add_all([
         Score(trace_id=t1.id, name="recall", value=1.0),
         Score(trace_id=t1.id, name="faithfulness", value=1.0),
+        Score(trace_id=t1.id, name="context_precision", value=0.9),
         Score(trace_id=t2.id, name="recall", value=0.0),
         Score(trace_id=t2.id, name="faithfulness", value=None),  # judge 挂,不参与均值
     ])
@@ -31,11 +32,15 @@ def test_aggregate_by_bucket():
     s.close()
 
     agg = aggregate_run(rid)
-    assert agg["scores"]["recall_avg"] == 0.5
-    assert agg["scores"]["faithfulness_avg"] == 1.0  # 只有 1 条非 NULL
-    assert agg["by_bucket"]["护理"]["recall_avg"] == 1.0
+    # 指标按注册表顺序,只含 present 的:recall → context_precision → faithfulness
+    assert list(agg["scores"].keys()) == ["recall", "context_precision", "faithfulness"]
+    assert agg["scores"]["recall"] == 0.5
+    assert agg["scores"]["faithfulness"] == 1.0      # 只有 1 条非 NULL
+    assert agg["scores"]["context_precision"] == 0.9  # 只有 1 条有值
+    assert agg["by_bucket"]["护理"]["recall"] == 1.0
     assert agg["by_bucket"]["护理"]["count"] == 1
-    assert agg["by_bucket"]["睡眠"]["recall_avg"] == 0.0
+    assert agg["by_bucket"]["睡眠"]["recall"] == 0.0
+    assert agg["by_bucket"]["睡眠"]["context_precision"] is None  # 睡眠桶没评该指标 → null
     assert agg["by_bucket"]["睡眠"]["count"] == 1
 
 
@@ -65,7 +70,8 @@ def test_aggregate_rejection():
     s.close()
 
     agg = aggregate_run(rid)
-    assert agg["scores"]["rejection_rate"] == 0.5
-    assert agg["scores"]["recall_avg"] is None  # 库外题不评 recall
-    assert agg["by_bucket"]["库外"]["rejection_rate"] == 0.5
+    assert list(agg["scores"].keys()) == ["rejection"]  # 库外题只评 rejection
+    assert agg["scores"]["rejection"] == 0.5
+    assert "recall" not in agg["scores"]  # 没评的指标不出现在 scores 里
+    assert agg["by_bucket"]["库外"]["rejection"] == 0.5
     assert agg["by_bucket"]["库外"]["count"] == 2

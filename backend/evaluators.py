@@ -1,5 +1,11 @@
 from backend import llm
-from backend.prompts import FAITHFULNESS_PROMPT
+from backend.prompts import (
+    ANSWER_CORRECTNESS_PROMPT,
+    ANSWER_RELEVANCE_PROMPT,
+    CONTEXT_PRECISION_PROMPT,
+    CONTEXT_RECALL_PROMPT,
+    FAITHFULNESS_PROMPT,
+)
 
 # 拒答信号词:命中任一即判定为「拒答」(库外题的正确行为)
 REJECT_MARKERS = ["不清楚", "不知道", "无法回答", "无法提供", "没有相关", "没有证据", "无法给出"]
@@ -19,15 +25,38 @@ def recall(expected_output: str, retrieved_context: str) -> float:
     return round(hits / len(points), 4)
 
 
-def faithfulness(output: str, retrieved_context: str) -> dict | None:
-    """LLM judge,温度 0。失败返回 None(记 NULL 不记 0)。"""
-    prompt = FAITHFULNESS_PROMPT.format(context=retrieved_context, answer=output)
+def _judge(prompt: str) -> dict | None:
+    """LLM judge 公共函数:chat_json 打分 + 夹逼到 [0,1]。失败返回 None(记 NULL 不记 0)。"""
     try:
         raw = llm.chat_json([{"role": "user", "content": prompt}], temperature=0.0)
         if raw is None or "score" not in raw:
             return None
-        score = float(raw["score"])
-        score = min(max(score, 0.0), 1.0)
+        score = min(max(float(raw["score"]), 0.0), 1.0)
         return {"score": round(score, 4), "reason": str(raw.get("reason", ""))}
     except Exception:
         return None
+
+
+def faithfulness(output: str, retrieved_context: str) -> dict | None:
+    """生成阶段:回答是否忠于证据、不编造。"""
+    return _judge(FAITHFULNESS_PROMPT.format(context=retrieved_context, answer=output))
+
+
+def context_precision(question: str, retrieved_context: str) -> dict | None:
+    """检索阶段:证据里相关有用的占比(噪声少)。"""
+    return _judge(CONTEXT_PRECISION_PROMPT.format(question=question, context=retrieved_context))
+
+
+def context_recall(question: str, expected_output: str, retrieved_context: str) -> dict | None:
+    """检索阶段:标准答案要点被证据覆盖的比例(漏检少)。"""
+    return _judge(CONTEXT_RECALL_PROMPT.format(question=question, expected=expected_output, context=retrieved_context))
+
+
+def answer_relevance(question: str, output: str) -> dict | None:
+    """生成阶段:回答是否切题、不跑题。"""
+    return _judge(ANSWER_RELEVANCE_PROMPT.format(question=question, answer=output))
+
+
+def answer_correctness(question: str, expected_output: str, output: str) -> dict | None:
+    """生成阶段:回答与标准答案要点的语义一致度。"""
+    return _judge(ANSWER_CORRECTNESS_PROMPT.format(question=question, expected=expected_output, answer=output))

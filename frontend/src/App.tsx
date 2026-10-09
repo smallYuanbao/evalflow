@@ -4,13 +4,14 @@ import ErrorBoundary from './components/ErrorBoundary'
 import DatasetsView from './views/DatasetsView'
 import RunsView from './views/RunsView'
 import RunDetailView from './views/RunDetailView'
+import CompareView from './views/CompareView'
 import DatasetDetailView from './views/DatasetDetailView'
 import KnowledgeMapView from './views/KnowledgeMapView'
 
 export default function App() {
   const location = useLocation()
   // 根据当前 URL 选中 tab,让浏览器前进/后退也能正确切换菜单(问题3)
-  const selectedKey = location.pathname.startsWith('/runs')
+  const selectedKey = location.pathname.startsWith('/runs') || location.pathname.startsWith('/compare')
     ? 'runs'
     : location.pathname.startsWith('/knowledge')
       ? 'knowledge'
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="/datasets/:datasetId" element={<DatasetDetailView />} />
             <Route path="/runs" element={<RunsView />} />
             <Route path="/runs/:runId" element={<RunDetailView />} />
+            <Route path="/compare" element={<CompareView />} />
             <Route path="/knowledge" element={<KnowledgeMapView />} />
           </Routes>
         </ErrorBoundary>

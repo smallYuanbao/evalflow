@@ -25,13 +25,15 @@ def test_list_runs_and_items(monkeypatch):
     # 走 HTTP 触发 BackgroundTask 会调真实 LLM,这里 mock 掉生成 + judge(测的是接口,不是 LLM)
     monkeypatch.setattr(
         run_service, "run_pipeline",
-        lambda q: {"output": "答", "retrieved_context": "物理降温 就医 用药",
-                   "hits": [{"text": "物理降温", "score": 0.9}]},
+        lambda q, top_k=2: {"output": "答", "retrieved_context": "物理降温 就医 用药",
+                            "hits": [{"text": "物理降温", "score": 0.9}]},
     )
-    monkeypatch.setattr(
-        run_service, "faithfulness",
-        lambda o, c: {"score": 0.9, "reason": "ok"},
-    )
+    # 库内题现在评 5 个 LLM judge,全部 mock(走 HTTP 会调真实 LLM,测的是接口不是 LLM)
+    monkeypatch.setattr(run_service, "faithfulness", lambda o, c: {"score": 0.9, "reason": "ok"})
+    monkeypatch.setattr(run_service, "context_precision", lambda q, c: {"score": 0.8, "reason": "ok"})
+    monkeypatch.setattr(run_service, "context_recall", lambda q, e, c: {"score": 0.7, "reason": "ok"})
+    monkeypatch.setattr(run_service, "answer_relevance", lambda q, o: {"score": 0.6, "reason": "ok"})
+    monkeypatch.setattr(run_service, "answer_correctness", lambda q, e, o: {"score": 0.5, "reason": "ok"})
 
     r = client.post("/datasets", json={"name": "t", "description": "d"})
     did = r.json()["id"]
@@ -46,8 +48,9 @@ def test_list_runs_and_items(monkeypatch):
     assert ours["updated_at"]  # 新评测集带修改时间(排序用)
     assert client.get(f"/datasets/{did}").json()["name"] == "t"  # 详情接口
 
-    client.post("/runs", json={"dataset_id": did, "config": "{}"})
+    client.post("/runs", json={"dataset_id": did, "config": '{"top_k": 3}'})
     ours_run = next(r for r in client.get("/runs").json() if r["dataset_id"] == did)
     assert ours_run["status"] in ("running", "done", "failed")
     assert ours_run["created_at"]  # 新 run 的 created_at 已补默认时间戳
     assert ours_run["dataset_name"] == "t"  # run 列表带评测集名称
+    assert ours_run["config"] == '{"top_k": 3}'  # 列表回看配置快照(Ch06)

@@ -7,6 +7,17 @@ import BucketChart from '../components/BucketChart'
 
 const fmt = (v: number | null) => (v === null ? '—' : v.toFixed(4))
 
+// 指标 key → 中文标签(后端只认 key,展示文案放前端)
+const METRIC_LABELS: Record<string, string> = {
+  recall: '召回(机械)',
+  context_precision: '上下文精度',
+  context_recall: '上下文召回',
+  faithfulness: '忠实度',
+  answer_relevance: '答案相关性',
+  answer_correctness: '答案正确性',
+  rejection: '拒答率',
+}
+
 export default function RunDetailView() {
   const { runId } = useParams()
   const id = Number(runId)
@@ -20,7 +31,13 @@ export default function RunDetailView() {
     )
   if (!run) return null
 
-  const bucketData = Object.entries(run.by_bucket).map(([name, s]) => ({ name, recall: s.recall_avg }))
+  const metricKeys = Object.keys(run.scores)
+  // 柱状图默认画「召回(机械)」,没有则画第一个出现的指标;一个都没有则空态
+  const chartMetric = metricKeys.includes('recall') ? 'recall' : metricKeys[0]
+  const bucketData = Object.entries(run.by_bucket).map(([name, s]) => ({
+    name,
+    recall: chartMetric ? (s[chartMetric] ?? null) : null,
+  }))
   const bucketRows = Object.entries(run.by_bucket).map(([name, s]) => ({ name, ...s }))
 
   return (
@@ -29,10 +46,10 @@ export default function RunDetailView() {
         Run #{run.id} <Tag color="blue">{run.status}</Tag>
       </h2>
       <Card style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', gap: 32 }}>
-          <MetricCard label="recall" value={run.scores.recall_avg} />
-          <MetricCard label="faithfulness" value={run.scores.faithfulness_avg} />
-          <MetricCard label="rejection" value={run.scores.rejection_rate} />
+        <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
+          {metricKeys.map((k) => (
+            <MetricCard key={k} label={METRIC_LABELS[k] ?? k} value={run.scores[k]} />
+          ))}
         </div>
       </Card>
       <Card title="分桶聚合" style={{ marginBottom: 16 }}>
@@ -45,9 +62,11 @@ export default function RunDetailView() {
           columns={[
             { title: '分桶', dataIndex: 'name' },
             { title: '样本数', dataIndex: 'count' },
-            { title: 'recall', dataIndex: 'recall_avg', render: fmt },
-            { title: 'faithfulness', dataIndex: 'faithfulness_avg', render: fmt },
-            { title: 'rejection', dataIndex: 'rejection_rate', render: fmt },
+            ...metricKeys.map((k) => ({
+              title: METRIC_LABELS[k] ?? k,
+              dataIndex: k,
+              render: fmt,
+            })),
           ]}
         />
       </Card>
@@ -75,7 +94,7 @@ export default function RunDetailView() {
               title: '分数',
               dataIndex: 'scores',
               render: (scs: { name: string; value: number | null }[]) =>
-                scs.map((s) => `${s.name}=${s.value ?? '—'}`).join(' '),
+                scs.map((s) => `${METRIC_LABELS[s.name] ?? s.name}=${s.value ?? '—'}`).join(' '),
             },
           ]}
         />

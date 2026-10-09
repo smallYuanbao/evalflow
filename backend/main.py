@@ -143,7 +143,8 @@ def list_runs():
     s.close()
     return [{"id": r.id, "dataset_id": r.dataset_id,
              "dataset_name": names.get(r.dataset_id),
-             "status": r.status, "created_at": r.created_at} for r in runs]
+             "status": r.status, "config": r.config,
+             "created_at": r.created_at} for r in runs]
 
 
 @app.get("/runs/{run_id}")

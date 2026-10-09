@@ -22,16 +22,12 @@ export interface Run {
   id: number
   dataset_id: number
   status: string
+  config?: string // 配置快照 JSON(如 {"top_k": 5}),列表回看用
   created_at?: string
   dataset_name?: string
 }
 
-export interface BucketStat {
-  count: number
-  recall_avg: number | null
-  faithfulness_avg: number | null
-  rejection_rate: number | null
-}
+export type BucketStat = { count: number } & Record<string, number | null>
 
 export interface RunDetail {
   id: number
@@ -39,11 +35,7 @@ export interface RunDetail {
   status: string
   config: string
   item_count: number
-  scores: {
-    recall_avg: number | null
-    faithfulness_avg: number | null
-    rejection_rate: number | null
-  }
+  scores: Record<string, number | null> // 指标 key → 均值(动态)
   by_bucket: Record<string, BucketStat>
 }
 

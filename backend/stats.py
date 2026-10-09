@@ -1,6 +1,7 @@
 from collections import defaultdict
 
 from backend.db import SessionLocal
+from backend.metrics import METRIC_ORDER
 from backend.models import DatasetItem, Run, Score, Trace
 
 
@@ -9,7 +10,7 @@ def _avg(vals):
 
 
 def aggregate_run(run_id: int) -> dict:
-    """聚合一次 run 的分数:整体均值 + 按 bucket 分组均值。judge 挂(NULL)不参与均值。"""
+    """聚合一次 run 的分数:按指标注册表动态遍历(不再硬编码指标名)。judge 挂(NULL)不参与均值。"""
     s = SessionLocal()
     run = s.get(Run, run_id)
     traces = s.query(Trace).filter(Trace.run_id == run_id).all()
@@ -25,25 +26,24 @@ def aggregate_run(run_id: int) -> dict:
             score_by_trace[sc.trace_id][sc.name] = sc.value
     s.close()
 
-    overall = {"recall": [], "faithfulness": [], "rejection": []}
-    buckets = defaultdict(lambda: {"recall": [], "faithfulness": [], "rejection": []})
+    # 动态收集「实际评过」的指标名,按注册表顺序排;注册表外的兜底排最后(未知指标不丢)
+    present = {name for tr in traces for name in score_by_trace.get(tr.id, {})}
+    ordered = [m for m in METRIC_ORDER if m in present] + [m for m in present if m not in METRIC_ORDER]
+
+    overall = {m: [] for m in ordered}
+    buckets = defaultdict(lambda: {m: [] for m in ordered})
     count_by_bucket = defaultdict(int)
     for tr in traces:
         b = bucket_by_item.get(tr.dataset_item_id, "未分桶")
         count_by_bucket[b] += 1
-        for key in ("recall", "faithfulness", "rejection"):
-            v = score_by_trace.get(tr.id, {}).get(key)
+        for m in ordered:
+            v = score_by_trace.get(tr.id, {}).get(m)
             if v is not None:
-                overall[key].append(v)
-                buckets[b][key].append(v)
+                overall[m].append(v)
+                buckets[b][m].append(v)
 
     by_bucket = {
-        b: {
-            "count": count_by_bucket[b],
-            "recall_avg": _avg(buckets[b]["recall"]),
-            "faithfulness_avg": _avg(buckets[b]["faithfulness"]),
-            "rejection_rate": _avg(buckets[b]["rejection"]),
-        }
+        b: {"count": count_by_bucket[b], **{m: _avg(buckets[b][m]) for m in ordered}}
         for b in buckets
     }
 
@@ -53,10 +53,6 @@ def aggregate_run(run_id: int) -> dict:
         "status": run.status,
         "config": run.config,
         "item_count": len(traces),
-        "scores": {
-            "recall_avg": _avg(overall["recall"]),
-            "faithfulness_avg": _avg(overall["faithfulness"]),
-            "rejection_rate": _avg(overall["rejection"]),
-        },
+        "scores": {m: _avg(overall[m]) for m in ordered},
         "by_bucket": by_bucket,
     }
