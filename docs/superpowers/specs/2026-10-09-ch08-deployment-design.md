@@ -31,6 +31,7 @@ docker-compose.yml
 | 决策 | 选择 | 备选与理由 |
 |---|---|---|
 | ChromaDB | Docker 官方 `chroma` 镜像(独立服务) | PersistentClient 内嵌 backend 容器:数据要挂卷且被 backend 独占;独立 chroma 服务是标准架构,也贴近 baby-ai 的 HttpClient 用法 |
+| retriever 切换方式 | 按环境:设 `CHROMA_HOST` 走 HttpClient,否则 PersistentClient | 一刀切 HttpClient:破坏本地 dev 和现有测试;按环境切换两全 |
 | 前端托管 | nginx + 反代 `/api` | FastAPI 托管静态:前后端耦合;nginx 是标准生产做法 |
 | embedding | 宿主机 Ollama,backend 经 host.docker.internal 访问 | 容器化 Ollama:模型 1.2GB 已本地装,重复容器化浪费 |
 | 数据持久化 | chroma 数据 + SQLite 各挂命名卷 | 不挂卷:容器重建数据全丢 |
@@ -38,8 +39,8 @@ docker-compose.yml
 
 ## 需要改动(实现时细化)
 
-1. `backend/retriever.py`:`PersistentClient`(本地文件)→ `HttpClient`(连 chroma 服务),灌库与检索都走 HTTP。这是 Ch08 最大的一处行为变更,需回归 Ch04 的向量检索测试。
-2. `backend/config.py`:`chroma_host` / `chroma_port` 等环境变量。
+1. `backend/retriever.py`:改为**按环境切换**——设 `CHROMA_HOST` 走独立 chroma 服务(HttpClient,容器模式),否则走本地文件(PersistentClient,本地 dev / 测试不变)。比「一刀切改成 HttpClient」更稳:本地开发与现有 `test_retriever.py`(monkeypatch `_client`)零破坏。
+2. `backend/config.py`:`chroma_host`(空 = 本地 PersistentClient)/ `chroma_port` 环境变量。
 3. `backend/Dockerfile`(uvicorn)+ `frontend/Dockerfile`(build 阶段 + nginx 阶段)。
 4. `docker-compose.yml` + `.env.example` 补 docker 相关变量。
 5. nginx 配置:`/api` 反代到 backend,`/` 服务静态。

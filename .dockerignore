@@ -1,0 +1,13 @@
+# 构建上下文要尽量小;密钥与运行时数据绝不进镜像
+.git
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.env            # 含 CHAT_API_KEY,绝不能打进镜像(运行时经 compose 注入)
+data            # SQLite / chroma 本地数据,容器里走命名卷
+node_modules
+dist
+docs
+tests
+scripts

@@ -1,0 +1,40 @@
+# EvalFlow 一键部署:chroma + backend + frontend
+# 使用:cp .env.example .env(填 CHAT_*),然后 docker compose up --build
+# Ollama 留在宿主机(backend 经 host.docker.internal 访问);Linux 若解析不到需给 backend 加
+#   extra_hosts: ["host.docker.internal:host-gateway"]
+services:
+  chroma:
+    image: chromadb/chroma:latest
+    volumes:
+      - chroma_data:/chroma/chroma # 官方镜像的持久化数据目录
+    # 不映射宿主机端口:只有 backend 访问;本地调试可临时加 ports: ["8000:8000"]
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped # retriever 在 import 时连 chroma,chroma 未 ready 会启动失败,重启自愈
+    environment:
+      - CHAT_MODEL=${CHAT_MODEL}
+      - CHAT_BASE_URL=${CHAT_BASE_URL}
+      - CHAT_API_KEY=${CHAT_API_KEY} # 运行时从 .env 注入,绝不写进镜像
+      - EMBED_BASE_URL=http://host.docker.internal:11434 # Ollama 在宿主机
+      - CHROMA_HOST=chroma
+      - CHROMA_PORT=8000
+    volumes:
+      - sqlite_data:/app/data # SQLite 落盘,容器重建不丢
+    depends_on:
+      - chroma
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  chroma_data:
+  sqlite_data:

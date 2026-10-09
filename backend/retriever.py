@@ -1,9 +1,18 @@
 import chromadb
 
+from backend.config import settings
 from backend.embedding import embed
 from backend.knowledge import KNOWLEDGE
 
-_client = chromadb.PersistentClient(path="data/chroma")
+
+def _make_client():
+    """容器化:设 CHROMA_HOST 走独立 chroma 服务(HttpClient);否则本地用文件(PersistentClient)。"""
+    if settings.chroma_host:
+        return chromadb.HttpClient(host=settings.chroma_host, port=settings.chroma_port)
+    return chromadb.PersistentClient(path="data/chroma")
+
+
+_client = _make_client()
 
 
 def _coll():
