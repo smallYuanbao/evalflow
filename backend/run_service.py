@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -59,17 +60,30 @@ def execute_run(run_id: int) -> None:
                 _bump_progress(run_id)
         _mark("done")
     except Exception:
+        logging.exception("run %s 执行失败", run_id)
         _mark("failed")
 
 
 def _process_item(run_id: int, item_id: int, input_: str, expected_output: str,
                   bucket: str, top_k: int) -> None:
-    """单样本评测:检索 + 生成 + 打分 + 写 Trace/Score(独立 session,线程安全)。"""
+    """单样本评测:检索 + 生成 + 打分 + 写 Trace/Score(独立 session,线程安全)。
+
+    LLM judge 在开 session 前算完:写锁跨 LLM 调用时,并发写 SQLite 会 database is locked。
+    """
     t0 = time.time()
     out = run_pipeline(input_, top_k)
     latency_ms = int((time.time() - t0) * 1000)
     hits = [{"text": h["text"], "score": h["score"], "rank": i + 1}
             for i, h in enumerate(out["hits"])]
+
+    # 5 个 LLM judge 提前算(不持 DB 写锁);库外题只评拒答,无 judge
+    judges = [] if bucket == ABSENT_BUCKET else [
+        ("context_precision", context_precision(input_, out["retrieved_context"])),
+        ("context_recall", context_recall(input_, expected_output, out["retrieved_context"])),
+        ("faithfulness", faithfulness(out["output"], out["retrieved_context"])),
+        ("answer_relevance", answer_relevance(input_, out["output"])),
+        ("answer_correctness", answer_correctness(input_, expected_output, out["output"])),
+    ]
 
     s = SessionLocal()
     tr = Trace(run_id=run_id, dataset_item_id=item_id,
@@ -86,14 +100,6 @@ def _process_item(run_id: int, item_id: int, input_: str, expected_output: str,
         # recall 机械基线(确定性,0 次 LLM)
         s.add(Score(trace_id=tr.id, name="recall",
                     value=recall(expected_output, out["retrieved_context"])))
-        # 5 个 LLM judge:统一「judge 挂记 NULL 不记 0」
-        judges = [
-            ("context_precision", context_precision(input_, out["retrieved_context"])),
-            ("context_recall", context_recall(input_, expected_output, out["retrieved_context"])),
-            ("faithfulness", faithfulness(out["output"], out["retrieved_context"])),
-            ("answer_relevance", answer_relevance(input_, out["output"])),
-            ("answer_correctness", answer_correctness(input_, expected_output, out["output"])),
-        ]
         for name, r in judges:
             if r is None:
                 s.add(Score(trace_id=tr.id, name=name, value=None, comment="judge 失败"))

@@ -51,6 +51,10 @@
 | 进度上报 | Task 2 + 3(progress)+ 4(前端) |
 | 同时多 run 并发 + 杀进程重启状态正确 | Task 2 + 3 + 5(测试) |
 
+## 真机验证修复记录(2026-10-10)
+
+首版真机跑 7 条样本并发 → 2 条 `database is locked`,run failed。根因:`_process_item` 写锁跨 5 个 LLM judge 调用。修复:judge 提前到 session 外 + `except` 加 `logging.exception`。复验 7 条 done、0 处 locked。
+
 ## 本章不做
 
 - 断点续跑、任务优先级、LLM 重试/熔断(Ch11)、PostgreSQL(Ch14)。

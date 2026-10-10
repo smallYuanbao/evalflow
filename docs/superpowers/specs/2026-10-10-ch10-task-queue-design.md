@@ -37,11 +37,23 @@ Ch10 把执行模型升级为「Celery 队列 + worker 并发」:请求入队立
 |---|---|---|
 | 队列 | **Celery + Redis** | 面试标准答案(「异步任务怎么做的」);本机已装 redis-server;生产级正解。轻量自研队列是反模式 |
 | 并发模型 | worker `--pool=threads`(单进程多线程)+ run 内 `ThreadPoolExecutor` | LLM 调用是 IO 密集,线程合适;单进程多线程避免 SQLite 多进程写锁(Ch14 换 PostgreSQL 才放开多进程) |
-| SQLite 并发 | WAL 模式 + `busy_timeout=5000` | 单进程多线程下 WAL 允许读写并发;busy_timeout 让写锁等待而非直接 `database is locked` |
+| SQLite 并发 | WAL 模式 + `busy_timeout=5000` + **写事务必须短**(不得跨 LLM 调用) | 单进程多线程下 WAL 允许读写并发;busy_timeout 让写锁等待。但写锁若被 LLM 调用长期持有,并发下仍会超时 `database is locked`(见「真机验证」) |
 | 任务拆分 | `execute_run` 保持**纯函数**(可测),`celery_app.run_task` 薄包装入队 | 测试不依赖 redis/worker;职责清晰(纯逻辑 vs 任务编排) |
 | 进度 | `runs` 表加 `progress` 字段(已完成样本数) | 前端轮询可见;复用已有 `_migrate` 加列不破坏旧库 |
 | 状态恢复 | 启动时扫描 `running → failed` 兜底 + Celery `acks_late`(worker 崩溃消息重投) | 简单可靠;「断点续跑」留后续 |
 | 测试 | 单元测试 mock `run_task.delay` 为同步执行 | 不依赖 redis/worker,保持现有测试风格 |
+
+## 真机验证发现与修复(2026-10-10)
+
+真机跑 `dataset#1`(7 条样本)首版实现:并发下 2 条 `database is locked`,run 置 failed、progress=0。
+
+**根因**:`_process_item` 里 `s.flush()` 拿写锁后,紧接着执行 5 个 LLM judge(每个几秒),写锁被 LLM 调用长期持有;4 线程并发下其他线程的 `flush` 等 `busy_timeout=5000` 超时后报 locked。
+
+**修复**:① 5 个 LLM judge 移到开 session 之前,写锁只持毫秒级事务;② `execute_run` 的 `except` 加 `logging.exception`,失败不再无日志。
+
+**复验**:run 7 条全 done、progress=7、0 处 locked、18.95s(并发生效)。
+
+**教训**:DB 事务要短,IO/LLM 调用绝不能放进事务里。
 
 ## 需要改动(实现时细化)
 
