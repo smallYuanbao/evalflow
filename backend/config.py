@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     embed_model: str = "bge-m3"                     # 本机已下载的 embedding 模型
     chroma_host: str = ""                           # 容器化:独立 chroma 服务地址;空 = 本地 PersistentClient
     chroma_port: int = 8000                         # chroma 服务端口
+    redis_url: str = "redis://localhost:6379/0"     # Celery broker/backend(评测任务队列)
+    run_concurrency: int = 4                        # 单个 run 内样本并发数(LLM 是 IO 密集,线程合适)
 
     model_config = {"env_file": ".env"}
 

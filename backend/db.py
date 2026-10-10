@@ -27,9 +27,11 @@ engine = create_engine(
 
 @event.listens_for(engine, "connect")
 def _enable_sqlite_fk(dbapi_connection, connection_record):
-    """SQLite 默认不强制外键,每个连接都要开 PRAGMA foreign_keys=ON。"""
+    """SQLite 连接初始化:外键 + WAL(读写并发)+ busy_timeout(写锁等待,防 database is locked)。"""
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA busy_timeout=5000")
     cursor.close()
 
 
@@ -51,3 +53,6 @@ def _migrate(engine) -> None:
         tcols = {c["name"] for c in inspect(conn).get_columns("traces")}
         if "retrieval_hits" not in tcols:
             conn.execute(text("ALTER TABLE traces ADD COLUMN retrieval_hits VARCHAR DEFAULT '[]'"))
+        rcols = {c["name"] for c in inspect(conn).get_columns("runs")}
+        if "progress" not in rcols:
+            conn.execute(text("ALTER TABLE runs ADD COLUMN progress INTEGER DEFAULT 0"))

@@ -3,6 +3,7 @@ name = "evalflow"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
+    "celery[redis]>=5.4.0",
     "chromadb>=1.5.9",
     "fastapi>=0.142.4",
     "numpy>=2.5.3",

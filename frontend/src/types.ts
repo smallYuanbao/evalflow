@@ -23,6 +23,7 @@ export interface Run {
   dataset_id: number
   status: string
   config?: string // 配置快照 JSON(如 {"top_k": 5}),列表回看用
+  progress?: number // 已完成样本数(Ch10 进度)
   created_at?: string
   dataset_name?: string
 }
@@ -34,6 +35,7 @@ export interface RunDetail {
   dataset_id: number
   status: string
   config: string
+  progress?: number // 已完成样本数(Ch10 进度)
   item_count: number
   scores: Record<string, number | null> // 指标 key → 均值(动态)
   by_bucket: Record<string, BucketStat>

@@ -5,6 +5,7 @@ WORKDIR /app
 
 # 依赖层单独一层:与 pyproject.toml 的 dependencies 保持一致,代码变更时不重装
 RUN pip install --no-cache-dir \
+    "celery[redis]>=5.4.0" \
     "chromadb>=1.5.9" \
     "fastapi>=0.142.4" \
     "numpy>=2.5.3" \

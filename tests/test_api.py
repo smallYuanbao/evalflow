@@ -22,9 +22,17 @@ def test_datasets_crud():
 
 
 def test_list_runs_and_items(monkeypatch):
-    from backend import run_service
+    from backend import main, run_service
 
-    # 走 HTTP 触发 BackgroundTask 会调真实 LLM,这里 mock 掉生成 + judge(测的是接口,不是 LLM)
+    # create_run 现在入队 run_task.delay;测试不依赖 redis,把 delay mock 成同步执行
+    class _FakeTask:
+        @staticmethod
+        def delay(run_id):
+            run_service.execute_run(run_id)
+
+    monkeypatch.setattr(main, "run_task", _FakeTask)
+
+    # 走 HTTP 触发 run 执行会调真实 LLM,这里 mock 掉生成 + judge(测的是接口,不是 LLM)
     monkeypatch.setattr(
         run_service, "run_pipeline",
         lambda q, top_k=2: {"output": "答", "retrieved_context": "物理降温 就医 用药",
@@ -59,3 +67,27 @@ def test_list_runs_and_items(monkeypatch):
     assert cfg["top_k"] == 3
     assert cfg["knowledge_version"] and cfg["prompt_version"]
     assert cfg["dataset_hash"] and cfg["item_count"] == 1
+
+
+def test_recover_stale_runs():
+    from backend import main
+    from backend.db import SessionLocal, init_db
+    from backend.models import Dataset, Run
+
+    # 造一个残留 running 的 run,直接调 _recover_stale_runs 验证被标 failed(Ch10 兜底)
+    init_db()
+    s = SessionLocal()
+    ds = Dataset(name="t", description="")
+    s.add(ds)
+    s.flush()
+    run = Run(dataset_id=ds.id, status="running", config="{}")
+    s.add(run)
+    s.commit()
+    rid = run.id
+    s.close()
+
+    main._recover_stale_runs()
+
+    s = SessionLocal()
+    assert s.get(Run, rid).status == "failed"
+    s.close()

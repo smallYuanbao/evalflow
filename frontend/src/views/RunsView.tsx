@@ -88,7 +88,12 @@ export default function RunsView() {
           {
             title: '状态',
             dataIndex: 'status',
-            render: (s: string) => <Tag color={STATUS[s]?.color}>{STATUS[s]?.text ?? s}</Tag>,
+            render: (s: string, r: Run) => (
+              <Space size={4}>
+                <Tag color={STATUS[s]?.color}>{STATUS[s]?.text ?? s}</Tag>
+                {s === 'running' && r.progress != null && <span>已完成 {r.progress} 条</span>}
+              </Space>
+            ),
           },
           { title: '时间', dataIndex: 'created_at' },
           {

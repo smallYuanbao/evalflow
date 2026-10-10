@@ -21,10 +21,12 @@ services:
       - EMBED_BASE_URL=http://host.docker.internal:11434 # Ollama 在宿主机
       - CHROMA_HOST=chroma
       - CHROMA_PORT=8000
+      - REDIS_URL=redis://redis:6379/0 # Celery broker(评测任务队列)
     volumes:
       - sqlite_data:/app/data # SQLite 落盘,容器重建不丢
     depends_on:
       - chroma
+      - redis
 
   frontend:
     build:
@@ -34,6 +36,30 @@ services:
       - "5173:80"
     depends_on:
       - backend
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    command: celery -A backend.celery_app worker --pool=threads --concurrency=4 --loglevel=info
+    environment:
+      - CHAT_MODEL=${CHAT_MODEL}
+      - CHAT_BASE_URL=${CHAT_BASE_URL}
+      - CHAT_API_KEY=${CHAT_API_KEY} # 运行时从 .env 注入,绝不写进镜像
+      - EMBED_BASE_URL=http://host.docker.internal:11434
+      - CHROMA_HOST=chroma
+      - CHROMA_PORT=8000
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - sqlite_data:/app/data
+    depends_on:
+      - chroma
+      - redis
 
 volumes:
   chroma_data:

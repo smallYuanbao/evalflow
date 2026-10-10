@@ -52,6 +52,7 @@ def aggregate_run(run_id: int) -> dict:
         "dataset_id": run.dataset_id,
         "status": run.status,
         "config": run.config,
+        "progress": run.progress,
         "item_count": len(traces),
         "scores": {m: _avg(overall[m]) for m in ordered},
         "by_bucket": by_bucket,

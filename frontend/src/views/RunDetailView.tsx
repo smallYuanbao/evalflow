@@ -67,6 +67,11 @@ export default function RunDetailView() {
     <div>
       <h2>
         Run #{run.id} <Tag color="blue">{run.status}</Tag>
+        {run.status === 'running' && (
+          <span style={{ fontSize: 14, marginLeft: 8 }}>
+            进度 {run.progress ?? 0}/{cfg.item_count ?? '—'}
+          </span>
+        )}
       </h2>
       <Card title="复现上下文" style={{ marginBottom: 16 }}>
         <Descriptions column={2} size="small">

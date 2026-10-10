@@ -1,14 +1,14 @@
 import json
 from contextlib import asynccontextmanager
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import func
 
+from backend.celery_app import run_task
 from backend.db import SessionLocal, init_db
 from backend.models import Dataset, DatasetItem, Run, Score, Trace, _now
-from backend.run_service import execute_run
 from backend.snapshot import build_snapshot, config_top_k
 from backend.stats import aggregate_run
 
@@ -16,7 +16,17 @@ from backend.stats import aggregate_run
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    _recover_stale_runs()  # 重启后把残留 running 的 run 标记 failed(Ch10 兜底)
     yield
+
+
+def _recover_stale_runs() -> None:
+    """进程重启后,残留 running 的 run 视为中断,标记 failed,避免永久卡 running。"""
+    s = SessionLocal()
+    for r in s.query(Run).filter(Run.status == "running"):
+        r.status = "failed"
+    s.commit()
+    s.close()
 
 
 app = FastAPI(title="EvalFlow", version="0.2.0", lifespan=lifespan)
@@ -121,7 +131,7 @@ def get_dataset(dataset_id: int):
 
 
 @app.post("/runs")
-def create_run(body: RunIn, background: BackgroundTasks):
+def create_run(body: RunIn):
     # 复现上下文:发起时快照 top_k + 知识库/prompt 版本 + 模型 + 数据集哈希,存进 config(Ch09)
     config = build_snapshot(body.dataset_id, config_top_k(body.config))
     s = SessionLocal()
@@ -132,7 +142,7 @@ def create_run(body: RunIn, background: BackgroundTasks):
     s.refresh(run)
     rid = run.id
     s.close()
-    background.add_task(execute_run, rid)
+    run_task.delay(rid)  # 入队由 Celery worker 消费(Ch10),不再用进程内 BackgroundTasks
     return {"id": rid, "status": "running"}
 
 
@@ -148,6 +158,7 @@ def list_runs():
     return [{"id": r.id, "dataset_id": r.dataset_id,
              "dataset_name": names.get(r.dataset_id),
              "status": r.status, "config": r.config,
+             "progress": r.progress,
              "created_at": r.created_at} for r in runs]
 
 

@@ -1,6 +1,8 @@
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from backend.config import settings
 from backend.db import SessionLocal
 from backend.evaluators import (
     answer_correctness,
@@ -19,50 +21,92 @@ ABSENT_BUCKET = "库外"  # 库外题:知识库里没有答案,正确行为是�
 
 
 def execute_run(run_id: int) -> None:
+    """并发调度:线程池并发跑样本,主线程收结果更新进度;全成 done,任一异常 failed。
+
+    注:与旧串行版不同,失败时已完成样本的 Trace 会保留(部分结果),便于定位挂在哪条。
+    """
     s = SessionLocal()
     run = s.get(Run, run_id)
-    top_k = config_top_k(run.config)
-    items = s.query(DatasetItem).filter(DatasetItem.dataset_id == run.dataset_id).all()
-    try:
-        for it in items:
-            t0 = time.time()
-            out = run_pipeline(it.input, top_k)
-            latency_ms = int((time.time() - t0) * 1000)
-            hits = [{"text": h["text"], "score": h["score"], "rank": i + 1}
-                    for i, h in enumerate(out["hits"])]
-            tr = Trace(run_id=run.id, dataset_item_id=it.id,
-                       input=it.input, output=out["output"],
-                       retrieved_context=out["retrieved_context"],
-                       retrieval_hits=json.dumps(hits, ensure_ascii=False),
-                       latency_ms=latency_ms)
-            s.add(tr)
-            s.flush()
-            if it.bucket == ABSENT_BUCKET:
-                # 库外题:只评「拒答」(正确行为是不答)
-                s.add(Score(trace_id=tr.id, name="rejection", value=rejected(out["output"])))
-            else:
-                # recall 机械基线(确定性,0 次 LLM)
-                s.add(Score(trace_id=tr.id, name="recall",
-                            value=recall(it.expected_output, out["retrieved_context"])))
-                # 5 个 LLM judge:统一「judge 挂记 NULL 不记 0」
-                judges = [
-                    ("context_precision", context_precision(it.input, out["retrieved_context"])),
-                    ("context_recall", context_recall(it.input, it.expected_output, out["retrieved_context"])),
-                    ("faithfulness", faithfulness(out["output"], out["retrieved_context"])),
-                    ("answer_relevance", answer_relevance(it.input, out["output"])),
-                    ("answer_correctness", answer_correctness(it.input, it.expected_output, out["output"])),
-                ]
-                for name, r in judges:
-                    if r is None:
-                        s.add(Score(trace_id=tr.id, name=name, value=None, comment="judge 失败"))
-                    else:
-                        s.add(Score(trace_id=tr.id, name=name, value=r["score"], comment=r["reason"]))
-        run.status = "done"
-        s.commit()
-    except Exception:
-        s.rollback()
-        run = s.get(Run, run_id)
-        run.status = "failed"
-        s.commit()
-    finally:
+    if run is None:
         s.close()
+        return
+    top_k = config_top_k(run.config)
+    rows = s.query(DatasetItem).filter(DatasetItem.dataset_id == run.dataset_id).all()
+    # 提前取出普通字段:commit 会让 ORM 对象 expire,detached 后访问会 DetachedInstanceError
+    items = [(it.id, it.input, it.expected_output, it.bucket) for it in rows]
+    run.progress = 0
+    s.commit()
+    s.close()
+
+    def _mark(status: str) -> None:
+        s = SessionLocal()
+        s.get(Run, run_id).status = status
+        s.commit()
+        s.close()
+
+    if not items:
+        _mark("done")
+        return
+
+    try:
+        with ThreadPoolExecutor(max_workers=max(1, settings.run_concurrency)) as pool:
+            futures = [
+                pool.submit(_process_item, run_id, iid, inp, exp, bkt, top_k)
+                for (iid, inp, exp, bkt) in items
+            ]
+            for done in as_completed(futures):
+                done.result()  # 样本抛异常 → 整个 run 失败(与旧语义一致)
+                _bump_progress(run_id)
+        _mark("done")
+    except Exception:
+        _mark("failed")
+
+
+def _process_item(run_id: int, item_id: int, input_: str, expected_output: str,
+                  bucket: str, top_k: int) -> None:
+    """单样本评测:检索 + 生成 + 打分 + 写 Trace/Score(独立 session,线程安全)。"""
+    t0 = time.time()
+    out = run_pipeline(input_, top_k)
+    latency_ms = int((time.time() - t0) * 1000)
+    hits = [{"text": h["text"], "score": h["score"], "rank": i + 1}
+            for i, h in enumerate(out["hits"])]
+
+    s = SessionLocal()
+    tr = Trace(run_id=run_id, dataset_item_id=item_id,
+               input=input_, output=out["output"],
+               retrieved_context=out["retrieved_context"],
+               retrieval_hits=json.dumps(hits, ensure_ascii=False),
+               latency_ms=latency_ms)
+    s.add(tr)
+    s.flush()
+    if bucket == ABSENT_BUCKET:
+        # 库外题:只评「拒答」(正确行为是不答)
+        s.add(Score(trace_id=tr.id, name="rejection", value=rejected(out["output"])))
+    else:
+        # recall 机械基线(确定性,0 次 LLM)
+        s.add(Score(trace_id=tr.id, name="recall",
+                    value=recall(expected_output, out["retrieved_context"])))
+        # 5 个 LLM judge:统一「judge 挂记 NULL 不记 0」
+        judges = [
+            ("context_precision", context_precision(input_, out["retrieved_context"])),
+            ("context_recall", context_recall(input_, expected_output, out["retrieved_context"])),
+            ("faithfulness", faithfulness(out["output"], out["retrieved_context"])),
+            ("answer_relevance", answer_relevance(input_, out["output"])),
+            ("answer_correctness", answer_correctness(input_, expected_output, out["output"])),
+        ]
+        for name, r in judges:
+            if r is None:
+                s.add(Score(trace_id=tr.id, name=name, value=None, comment="judge 失败"))
+            else:
+                s.add(Score(trace_id=tr.id, name=name, value=r["score"], comment=r["reason"]))
+    s.commit()
+    s.close()
+
+
+def _bump_progress(run_id: int) -> None:
+    """进度自增(原子 UPDATE progress = progress + 1,避免并发读-改-写竞争)。"""
+    s = SessionLocal()
+    s.query(Run).filter(Run.id == run_id).update(
+        {Run.progress: Run.progress + 1}, synchronize_session=False)
+    s.commit()
+    s.close()

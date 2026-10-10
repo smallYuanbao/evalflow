@@ -39,6 +39,7 @@ class Run(Base):
     dataset_id = Column(Integer, ForeignKey("datasets.id"))
     status = Column(String, default="running")  # running / done / failed
     config = Column(Text, default="{}")         # 配置快照 JSON
+    progress = Column(Integer, default=0)       # 已完成样本数(进度,Ch10)
     created_at = Column(String, default=_now)
 
 
