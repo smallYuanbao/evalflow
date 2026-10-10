@@ -3,12 +3,14 @@ name = "evalflow"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
+    "alembic>=1.14",
     "celery[redis]>=5.4.0",
     "chromadb>=1.5.9",
     "fastapi>=0.142.4",
     "numpy>=2.5.3",
     "onnxruntime==1.23.2",
     "openai>=3.26.0",
+    "psycopg[binary]>=3.2",
     "pydantic-settings>=2.15.0",
     "requests>=2.34.2",
     "sqlalchemy>=2.1.4",

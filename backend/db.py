@@ -1,10 +1,14 @@
 from pathlib import Path
 
-from sqlalchemy import create_engine, event, inspect, text
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import create_engine, event, inspect
 from sqlalchemy.orm import sessionmaker
 
 from backend.config import settings
 from backend.models import Base
+
+_ROOT = Path(__file__).resolve().parent.parent  # 仓库根(alembic.ini / migrations 在这)
 
 
 def _ensure_sqlite_dir(url: str) -> None:
@@ -19,40 +23,50 @@ def _ensure_sqlite_dir(url: str) -> None:
 
 _ensure_sqlite_dir(settings.database_url)
 
-engine = create_engine(
-    settings.database_url,
-    connect_args={"check_same_thread": False},  # SQLite 单文件,允许跨线程
-)
+# check_same_thread 是 SQLite 专属参数,psycopg 不认;按方言只在 SQLite 时传(Ch14 方言分支)
+_connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
+
+engine = create_engine(settings.database_url, connect_args=_connect_args)
 
 
-@event.listens_for(engine, "connect")
-def _enable_sqlite_fk(dbapi_connection, connection_record):
-    """SQLite 连接初始化:外键 + WAL(读写并发)+ busy_timeout(写锁等待,防 database is locked)。"""
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA busy_timeout=5000")
-    cursor.close()
+if engine.dialect.name == "sqlite":
+    @event.listens_for(engine, "connect")
+    def _enable_sqlite_fk(dbapi_connection, connection_record):
+        """SQLite 连接初始化:外键 + WAL(读写并发)+ busy_timeout(写锁等待,防 database is locked)。
+
+        PRAGMA 是 SQLite 专属,PostgreSQL 没有;整个事件只在 SQLite 方言下注册。
+        """
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.close()
 
 
 SessionLocal = sessionmaker(bind=engine)
 
 
+def _alembic_config() -> Config:
+    """构造 alembic 配置:script_location 用绝对路径,不依赖 cwd;URL 由 env.py 直读 settings。"""
+    cfg = Config(str(_ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(_ROOT / "migrations"))
+    return cfg
+
+
 def init_db() -> None:
-    Base.metadata.create_all(engine)
-    _migrate(engine)
+    """建表/迁移:跑 alembic upgrade head(替代 create_all + 手写 _migrate)。
 
+    存量库兼容:老库是 create_all 建的,有表但没有 alembic_version,先 stamp head「收养」,
+    否则 upgrade head 会因「表已存在」报错。幂等:已迁移过的库再跑是无操作。
 
-def _migrate(engine) -> None:
-    """SQLite 的 create_all 不会给已存在的表加新列,这里补历史库缺的 updated_at / retrieval_hits。"""
-    with engine.begin() as conn:
-        cols = {c["name"] for c in inspect(conn).get_columns("datasets")}
-        if "updated_at" not in cols:
-            conn.execute(text("ALTER TABLE datasets ADD COLUMN updated_at VARCHAR"))
-            conn.execute(text("UPDATE datasets SET updated_at = created_at WHERE updated_at IS NULL"))
-        tcols = {c["name"] for c in inspect(conn).get_columns("traces")}
-        if "retrieval_hits" not in tcols:
-            conn.execute(text("ALTER TABLE traces ADD COLUMN retrieval_hits VARCHAR DEFAULT '[]'"))
-        rcols = {c["name"] for c in inspect(conn).get_columns("runs")}
-        if "progress" not in rcols:
-            conn.execute(text("ALTER TABLE runs ADD COLUMN progress INTEGER DEFAULT 0"))
+    探测与迁移都走 settings.database_url(而非模块级 engine),保证一致、也便于测试指到临时库。
+    """
+    url = settings.database_url
+    _ensure_sqlite_dir(url)
+    cfg = _alembic_config()
+    with create_engine(url).connect() as conn:
+        tables = inspect(conn).get_table_names()
+    if tables and "alembic_version" not in tables:
+        command.stamp(cfg, "head")
+    else:
+        command.upgrade(cfg, "head")

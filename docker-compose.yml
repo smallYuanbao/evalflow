@@ -22,6 +22,7 @@ services:
       - CHROMA_HOST=chroma
       - CHROMA_PORT=8000
       - REDIS_URL=redis://redis:6379/0 # Celery broker(评测任务队列)
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///data/eval.db} # 留空=SQLite;可选 postgresql+psycopg://...
     volumes:
       - sqlite_data:/app/data # SQLite 落盘,容器重建不丢
     depends_on:
@@ -55,12 +56,31 @@ services:
       - CHROMA_HOST=chroma
       - CHROMA_PORT=8000
       - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///data/eval.db} # 与 backend 同一份库
     volumes:
       - sqlite_data:/app/data
     depends_on:
       - chroma
       - redis
 
+  # 可选 PostgreSQL:默认 docker compose up 不起;切 PG 时 docker compose --profile postgres up
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["postgres"]
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=evalflow
+      - POSTGRES_PASSWORD=evalflow
+      - POSTGRES_DB=evalflow
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evalflow -d evalflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   chroma_data:
   sqlite_data:
+  pg_data:
