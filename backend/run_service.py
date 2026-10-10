@@ -19,6 +19,8 @@ from backend.models import DatasetItem, Generation, Run, Score, Trace
 from backend.pipeline import run_pipeline
 from backend.snapshot import config_top_k
 
+logger = logging.getLogger(__name__)
+
 ABSENT_BUCKET = "库外"  # 库外题:知识库里没有答案,正确行为是拒答
 
 
@@ -40,6 +42,9 @@ def execute_run(run_id: int) -> None:
     s.commit()
     s.close()
 
+    logger.info("run 开始执行", extra={"run_id": run_id})
+    t0 = time.time()
+
     def _mark(status: str) -> None:
         s = SessionLocal()
         s.get(Run, run_id).status = status
@@ -48,6 +53,8 @@ def execute_run(run_id: int) -> None:
 
     if not items:
         _mark("done")
+        logger.info("run 执行完成", extra={"run_id": run_id,
+                                           "duration_ms": int((time.time() - t0) * 1000)})
         return
 
     try:
@@ -60,8 +67,11 @@ def execute_run(run_id: int) -> None:
                 done.result()  # 样本抛异常 → 整个 run 失败(与旧语义一致)
                 _bump_progress(run_id)
         _mark("done")
+        logger.info("run 执行完成", extra={"run_id": run_id,
+                                           "duration_ms": int((time.time() - t0) * 1000)})
     except Exception:
-        logging.exception("run %s 执行失败", run_id)
+        logger.exception("run 执行失败", extra={"run_id": run_id,
+                                                "duration_ms": int((time.time() - t0) * 1000)})
         _mark("failed")
 
 
@@ -99,7 +109,8 @@ def _process_item(run_id: int, item_id: int, input_: str, expected_output: str,
                latency_ms=latency_ms)
     s.add(tr)
     s.flush()
-    s.add(Generation(trace_id=tr.id, model=settings.chat_model,
+    trace_id = tr.id  # commit 会让 ORM 对象 expire,提前取普通字段(Ch10 坑 #2)
+    s.add(Generation(trace_id=trace_id, model=settings.chat_model,
                      input_tokens=prompt_tokens, output_tokens=completion_tokens, cost=cost))
     if bucket == ABSENT_BUCKET:
         # 库外题:只评「拒答」(正确行为是不答)
@@ -115,6 +126,7 @@ def _process_item(run_id: int, item_id: int, input_: str, expected_output: str,
                 s.add(Score(trace_id=tr.id, name=name, value=r["score"], comment=r["reason"]))
     s.commit()
     s.close()
+    logger.info("样本评测完成", extra={"run_id": run_id, "trace_id": trace_id, "latency_ms": latency_ms})
 
 
 def _bump_progress(run_id: int) -> None:

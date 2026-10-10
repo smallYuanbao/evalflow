@@ -55,6 +55,16 @@ export interface TraceRow {
   scores: { name: string; value: number | null }[]
 }
 
+// 历史指标趋势(Ch13):单个 run 的 per-metric 均值,用于折线图
+export interface RunTrend {
+  id: number
+  dataset_id: number
+  dataset_name?: string
+  status: string
+  created_at?: string
+  scores: Record<string, number | null>
+}
+
 export interface KnowledgeChunk {
   id: string
   text: string

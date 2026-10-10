@@ -121,3 +121,44 @@ def test_create_run_rate_limited(monkeypatch):
     assert client.post("/runs", json={"dataset_id": did, "config": "{}"}).status_code == 200
     assert client.post("/runs", json={"dataset_id": did, "config": "{}"}).status_code == 200
     assert client.post("/runs", json={"dataset_id": did, "config": "{}"}).status_code == 429  # 超限
+
+
+# —— Ch13 可观测性 ——
+
+def test_runs_trend_route():
+    # 关键:证明 /runs/trend 注册在 /runs/{run_id} 之前(顺序反了会 422)
+    r = client.get("/runs/trend")
+    assert r.status_code == 200
+    assert isinstance(r.json(), list)
+
+
+def test_run_export_route():
+    from backend.db import SessionLocal, init_db
+    from backend.models import Dataset, DatasetItem, Run, Score, Trace
+
+    init_db()
+    s = SessionLocal()
+    ds = Dataset(name="导出", description="")
+    s.add(ds)
+    s.flush()
+    i1 = DatasetItem(dataset_id=ds.id, input="q", expected_output="a", bucket="护理")
+    s.add(i1)
+    s.flush()
+    run = Run(dataset_id=ds.id, status="done", config="{}")
+    s.add(run)
+    s.flush()
+    t1 = Trace(run_id=run.id, dataset_item_id=i1.id, input="q", output="o", retrieved_context="c")
+    s.add(t1)
+    s.flush()
+    s.add(Score(trace_id=t1.id, name="recall", value=1.0))
+    s.commit()
+    rid = run.id
+    s.close()
+
+    r = client.get(f"/runs/{rid}/export")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/csv")
+    assert "attachment" in r.headers["content-disposition"]
+    assert "trace_id" in r.text
+
+    assert client.get("/runs/999999/export").status_code == 404  # 无明细 → 404

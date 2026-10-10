@@ -1,4 +1,5 @@
 import json
+import logging
 import random
 import threading
 import time
@@ -12,6 +13,8 @@ from openai import (
 )
 
 from backend.config import settings
+
+logger = logging.getLogger(__name__)
 
 _client = OpenAI(api_key=settings.chat_api_key, base_url=settings.chat_base_url,
                  timeout=settings.chat_timeout)
@@ -122,6 +125,8 @@ def _create_with_retry(**kwargs):
             last_exc = e
             _circuit.on_failure()
             if attempt < settings.chat_retries:
+                logger.warning("LLM 调用失败,准备重试",
+                               extra={"attempt": attempt + 1, "error": str(e)})
                 time.sleep(_backoff(attempt))
         except Exception:
             # 非可重试(4xx 等):服务是通的,不算故障,重置熔断后直接抛

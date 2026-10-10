@@ -3,21 +3,23 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import func
 
 from backend.celery_app import run_task
 from backend.config import settings
 from backend.db import SessionLocal, init_db
+from backend.logging_config import setup_logging
 from backend.models import Dataset, DatasetItem, Run, Score, Trace, _now
 from backend.ratelimit import run_limiter
 from backend.snapshot import build_snapshot, config_top_k
-from backend.stats import aggregate_run
+from backend.stats import aggregate_run, run_export_csv, runs_trend
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    setup_logging()  # API 进程也走结构化日志(Ch13)
     init_db()
     _recover_stale_runs()  # 重启后把残留 running 的 run 标记 failed(Ch10 兜底)
     yield
@@ -182,9 +184,32 @@ def list_runs():
              "created_at": r.created_at} for r in runs]
 
 
+@app.get("/runs/trend")
+def get_runs_trend(limit: int = 50):
+    """历史指标趋势:批量返回最近 N 个 run 的 per-metric 均值(Ch13)。
+
+    注意:必须注册在 /runs/{run_id} 之前,否则 trend 会被当成 run_id 解析成 422。
+    """
+    return runs_trend(limit)
+
+
 @app.get("/runs/{run_id}")
 def get_run(run_id: int):
     return aggregate_run(run_id)
+
+
+@app.get("/runs/{run_id}/export")
+def export_run(run_id: int):
+    """导出某 run 的逐 trace 明细为 CSV(Ch13 供外部分析)。"""
+    csv_text = run_export_csv(run_id)
+    if not csv_text:
+        raise HTTPException(status_code=404, detail="run 不存在或没有明细")
+    # BOM:让 Excel 正确识别 UTF-8,中文不乱码
+    return Response(
+        content="﻿" + csv_text,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename=run_{run_id}.csv"},
+    )
 
 
 @app.get("/runs/{run_id}/traces")

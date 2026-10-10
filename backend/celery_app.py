@@ -20,5 +20,7 @@ celery_app.conf.update(
 @celery_app.task(name="evalflow.execute_run")
 def run_task(run_id: int) -> None:
     """入队入口:worker 消费后执行真实评测逻辑(纯函数在 run_service.execute_run)。"""
+    from backend.logging_config import setup_logging
     from backend.run_service import execute_run
+    setup_logging()  # worker 进程也走结构化日志(幂等,Ch13)
     execute_run(run_id)

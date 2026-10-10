@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Button, Card, Descriptions, Result, Select, Skeleton, Table, Tag } from 'antd'
+import { Button, Card, Descriptions, Result, Select, Skeleton, Table, Tag, message } from 'antd'
 import { api } from '../api'
 import { useRequest } from '../hooks/useRequest'
 import MetricCard from '../components/MetricCard'
@@ -38,6 +38,22 @@ export default function RunDetailView() {
   const { data: traces } = useRequest((s) => api.listTraces(id, s), [id])
   const [chartMetric, setChartMetric] = useState<string | null>(null)
 
+  // 导出 CSV(Ch13):带鉴权头走 axios 拉文本,再 Blob 触发浏览器下载
+  const exportCsv = async () => {
+    try {
+      const csv = await api.exportRunCsv(id)
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `run_${id}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : '导出失败')
+    }
+  }
+
   // 复现上下文:解析 config 快照;老 run 缺字段显示 —
   const cfg = useMemo<Snapshot>(() => {
     try { return JSON.parse(run?.config || '{}') }
@@ -65,14 +81,17 @@ export default function RunDetailView() {
 
   return (
     <div>
-      <h2>
-        Run #{run.id} <Tag color="blue">{run.status}</Tag>
-        {run.status === 'running' && (
-          <span style={{ fontSize: 14, marginLeft: 8 }}>
-            进度 {run.progress ?? 0}/{cfg.item_count ?? '—'}
-          </span>
-        )}
-      </h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h2 style={{ margin: 0 }}>
+          Run #{run.id} <Tag color="blue">{run.status}</Tag>
+          {run.status === 'running' && (
+            <span style={{ fontSize: 14, marginLeft: 8 }}>
+              进度 {run.progress ?? 0}/{cfg.item_count ?? '—'}
+            </span>
+          )}
+        </h2>
+        <Button onClick={exportCsv}>导出 CSV</Button>
+      </div>
       <Card title="费用统计" style={{ marginBottom: 16 }}>
         <Descriptions column={3} size="small">
           <Descriptions.Item label="输入 Token">{run.input_tokens ?? 0}</Descriptions.Item>
