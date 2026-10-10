@@ -1,5 +1,6 @@
 // 统一请求封装(axios 实例 + 拦截器):请求前参数注入 / 请求后错误码兼容
 import axios, { AxiosError, type AxiosRequestConfig } from 'axios'
+import { getApiKey } from './key'
 
 const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'
 
@@ -29,9 +30,9 @@ const http = axios.create({ baseURL: BASE })
 // 请求「前」钩子:统一参数注入(axios request 拦截器)
 http.interceptors.request.use((config) => {
   config.headers.set('Content-Type', 'application/json')
-  // 以后要注入的公共参数都在这加,例如:
-  // const token = getToken(); if (token) config.headers.set('Authorization', `Bearer ${token}`)
-  // config.headers.set('X-Request-Id', crypto.randomUUID())
+  // Ch12 鉴权:已设密钥则每个请求都带 Authorization,后端中间件校验
+  const key = getApiKey()
+  if (key) config.headers.set('Authorization', `Bearer ${key}`)
   return config
 })
 

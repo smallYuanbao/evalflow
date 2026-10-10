@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { Layout, Menu, Skeleton } from 'antd'
 import ErrorBoundary from './components/ErrorBoundary'
+import ApiKeyButton from './components/ApiKeyButton'
 
 // 路由级懒加载:按视图拆包,首屏只加载入口 + 当前路由(Ch07 解决 1.4MB 单 chunk 警告)
 const DatasetsView = lazy(() => import('./views/DatasetsView'))
@@ -21,8 +22,8 @@ export default function App() {
       : 'datasets'
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Layout.Header>
-        <Menu theme="dark" mode="horizontal" selectedKeys={[selectedKey]}>
+      <Layout.Header style={{ display: 'flex', alignItems: 'center' }}>
+        <Menu theme="dark" mode="horizontal" selectedKeys={[selectedKey]} style={{ flex: 1, minWidth: 0 }}>
           <Menu.Item key="datasets">
             <Link to="/datasets">评测集</Link>
           </Menu.Item>
@@ -33,6 +34,7 @@ export default function App() {
             <Link to="/knowledge">知识库</Link>
           </Menu.Item>
         </Menu>
+        <ApiKeyButton />
       </Layout.Header>
       <Layout.Content style={{ padding: 24 }}>
         <ErrorBoundary>

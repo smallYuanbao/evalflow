@@ -91,3 +91,33 @@ def test_recover_stale_runs():
     s = SessionLocal()
     assert s.get(Run, rid).status == "failed"
     s.close()
+
+
+# —— Ch12 鉴权 + 限流 ——
+
+def test_auth_required(monkeypatch):
+    from backend.config import settings
+
+    monkeypatch.setattr(settings, "app_api_key", "secret-123")
+    assert client.get("/datasets").status_code == 401                       # 无 key 拒绝
+    assert client.get("/datasets", headers={"Authorization": "Bearer wrong"}).status_code == 401  # 错 key 拒绝
+    assert client.get("/datasets", headers={"Authorization": "Bearer secret-123"}).status_code == 200  # 对 key 放行
+    assert client.get("/health").status_code == 200                         # health 豁免
+
+
+def test_create_run_rate_limited(monkeypatch):
+    from backend import main
+
+    class _FakeTask:
+        @staticmethod
+        def delay(run_id):
+            pass
+
+    monkeypatch.setattr(main, "run_task", _FakeTask)
+    monkeypatch.setattr(main.run_limiter, "max_requests", 2)
+    main.run_limiter._reset()
+
+    did = client.post("/datasets", json={"name": "限流", "description": ""}).json()["id"]
+    assert client.post("/runs", json={"dataset_id": did, "config": "{}"}).status_code == 200
+    assert client.post("/runs", json={"dataset_id": did, "config": "{}"}).status_code == 200
+    assert client.post("/runs", json={"dataset_id": did, "config": "{}"}).status_code == 429  # 超限

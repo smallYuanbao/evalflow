@@ -1,5 +1,5 @@
 from backend.db import SessionLocal, init_db
-from backend.models import Dataset, DatasetItem, Run, Score, Trace
+from backend.models import Dataset, DatasetItem, Generation, Run, Score, Trace
 from backend.stats import aggregate_run
 
 
@@ -75,3 +75,34 @@ def test_aggregate_rejection():
     assert "recall" not in agg["scores"]  # 没评的指标不出现在 scores 里
     assert agg["by_bucket"]["库外"]["rejection"] == 0.5
     assert agg["by_bucket"]["库外"]["count"] == 2
+
+
+def test_aggregate_cost():
+    # Ch12 费用统计:run 汇总所有样本的 token 与费用
+    init_db()
+    s = SessionLocal()
+    ds = Dataset(name="t", description="")
+    s.add(ds)
+    s.flush()
+    i1 = DatasetItem(dataset_id=ds.id, input="q1", expected_output="a", bucket="护理")
+    s.add(i1)
+    s.flush()
+    run = Run(dataset_id=ds.id, status="done", config="{}")
+    s.add(run)
+    s.flush()
+    t1 = Trace(run_id=run.id, dataset_item_id=i1.id, input="q1", output="o1", retrieved_context="c")
+    s.add(t1)
+    s.flush()
+    s.add_all([
+        Generation(trace_id=t1.id, model="deepseek-chat",
+                   input_tokens=100, output_tokens=50, cost=0.0006),
+        Score(trace_id=t1.id, name="recall", value=1.0),
+    ])
+    s.commit()
+    rid = run.id
+    s.close()
+
+    agg = aggregate_run(rid)
+    assert agg["input_tokens"] == 100
+    assert agg["output_tokens"] == 50
+    assert agg["cost"] == 0.0006

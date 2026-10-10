@@ -2,7 +2,7 @@ import json
 
 from backend import run_service
 from backend.db import SessionLocal, init_db
-from backend.models import Dataset, DatasetItem, Run, Score, Trace
+from backend.models import Dataset, DatasetItem, Generation, Run, Score, Trace
 
 # 5 个 LLM judge 都要 mock(走 HTTP 会调真实 LLM)
 JUDGES = {
@@ -55,6 +55,25 @@ def test_execute_run_done(monkeypatch):
     assert names == INBUCKET  # 库内题:6 个指标
     hits = json.loads(tr.retrieval_hits)          # 检索命中已落库(JSON)
     assert hits == [{"text": "物理降温", "score": 0.9, "rank": 1}]
+    gens = s.query(Generation).filter(Generation.trace_id == tr.id).all()
+    assert len(gens) == 1 and gens[0].input_tokens == 0  # judge/pipeline 全 mock,无真实 token(Ch12)
+    s.close()
+
+
+def test_generation_records_cost(monkeypatch):
+    # 计量到 token 后,Generation 要写对 token 与费用(Ch12 费用统计)
+    from backend import llm
+
+    rid = _seed_run(monkeypatch)
+    monkeypatch.setattr(llm, "get_usage", lambda: (1000, 500))  # 模拟计量到 1000 输入 / 500 输出
+    run_service.execute_run(rid)
+    s = SessionLocal()
+    gens = s.query(Generation).filter(Generation.trace_id.in_(
+        [tr.id for tr in s.query(Trace).filter(Trace.run_id == rid)])).all()
+    assert len(gens) == 1
+    assert gens[0].input_tokens == 1000
+    assert gens[0].output_tokens == 500
+    assert gens[0].cost == round(llm.compute_cost(1000, 500), 6)
     s.close()
 
 

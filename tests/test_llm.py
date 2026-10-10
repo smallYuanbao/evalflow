@@ -12,6 +12,13 @@ def _fake_resp(content: str):
     return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
 
 
+def _fake_resp_with_usage(content: str, prompt: int = 100, completion: int = 50):
+    return SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content=content))],
+        usage=SimpleNamespace(prompt_tokens=prompt, completion_tokens=completion),
+    )
+
+
 # —— Ch02 已有 ——
 
 def test_chat_json_parses(monkeypatch):
@@ -104,3 +111,32 @@ def test_circuit_half_open_recovers(monkeypatch):
     monkeypatch.setattr(llm._client.chat.completions, "create", lambda **kw: _fake_resp("hi"))
     assert llm.chat([{"role": "user", "content": "x"}]) == "hi"
     assert llm._circuit._state == "closed"  # 探测成功,熔断关闭
+
+
+# —— Ch12 token 计量 + 费用 ——
+
+def test_usage_metering(monkeypatch):
+    llm.reset_usage()
+    monkeypatch.setattr(
+        llm._client.chat.completions, "create",
+        lambda **kw: _fake_resp_with_usage("hi", prompt=100, completion=50),
+    )
+    llm.chat([{"role": "user", "content": "x"}])
+    assert llm.get_usage() == (100, 50)
+    llm.reset_usage()  # 归零
+    assert llm.get_usage() == (0, 0)
+
+
+def test_usage_ignores_missing_usage_field(monkeypatch):
+    # 某些 mock/接口不返回 usage:计量不报错,保持 0
+    llm.reset_usage()
+    monkeypatch.setattr(llm._client.chat.completions, "create", lambda **kw: _fake_resp("hi"))
+    llm.chat([{"role": "user", "content": "x"}])
+    assert llm.get_usage() == (0, 0)
+
+
+def test_compute_cost():
+    # 按价格表(元/百万 token):1M 输入 = 输入单价,1M 输出 = 输出单价
+    assert llm.compute_cost(1_000_000, 0) == settings.chat_price_input_per_1m
+    assert llm.compute_cost(0, 1_000_000) == settings.chat_price_output_per_1m
+    assert llm.compute_cost(0, 0) == 0.0

@@ -39,6 +39,10 @@ export interface RunDetail {
   item_count: number
   scores: Record<string, number | null> // 指标 key → 均值(动态)
   by_bucket: Record<string, BucketStat>
+  // Ch12 费用统计(可选:老 run 无此字段)
+  input_tokens?: number
+  output_tokens?: number
+  cost?: number
 }
 
 export interface TraceRow {

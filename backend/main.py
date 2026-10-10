@@ -1,14 +1,17 @@
 import json
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import func
 
 from backend.celery_app import run_task
+from backend.config import settings
 from backend.db import SessionLocal, init_db
 from backend.models import Dataset, DatasetItem, Run, Score, Trace, _now
+from backend.ratelimit import run_limiter
 from backend.snapshot import build_snapshot, config_top_k
 from backend.stats import aggregate_run
 
@@ -31,7 +34,21 @@ def _recover_stale_runs() -> None:
 
 app = FastAPI(title="EvalFlow", version="0.2.0", lifespan=lifespan)
 
-# 前端 dev 在 5173,前后端分离要显式开 CORS(真实项目这是必答题)
+
+# 鉴权中间件(Ch12):校验 Authorization: Bearer <app_api_key>。
+# 先注册 = 在 CORS 之内,这样 401 响应也带 CORS 头,前端能正确读到错误码(而非 CORS 报错)。
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    if settings.app_api_key and request.url.path != "/health" and request.method != "OPTIONS":
+        auth = request.headers.get("Authorization", "")
+        token = auth[len("Bearer "):].strip() if auth.startswith("Bearer ") else ""
+        if token != settings.app_api_key:
+            return JSONResponse(status_code=401, content={"detail": "无效或缺失的 API Key"})
+    return await call_next(request)
+
+
+# 前端 dev 在 5173,前后端分离要显式开 CORS(真实项目这是必答题)。
+# 最后注册 = 最外层,让所有响应(含 401)都过一遍 CORS 加头。
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
@@ -132,6 +149,9 @@ def get_dataset(dataset_id: int):
 
 @app.post("/runs")
 def create_run(body: RunIn):
+    # 限流(Ch12 防刷):发起评测烧钱,限频率,超限 429
+    if not run_limiter.allow():
+        raise HTTPException(status_code=429, detail="发起评测过于频繁,请稍后再试")
     # 复现上下文:发起时快照 top_k + 知识库/prompt 版本 + 模型 + 数据集哈希,存进 config(Ch09)
     config = build_snapshot(body.dataset_id, config_top_k(body.config))
     s = SessionLocal()

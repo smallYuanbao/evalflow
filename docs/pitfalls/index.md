@@ -13,6 +13,7 @@
 - [Ch09 可复现](ch09-reproducibility.md) —— 老 run 向后兼容
 - [Ch10 任务队列](ch10-task-queue.md) —— 写锁跨 LLM / DetachedInstanceError / uv / worker 热重载 / 吞异常
 - [Ch11 LLM 可靠性](ch11-llm-reliability.md) —— openai 异常构造 / before_call 放 try 外 / 4xx 不算故障 / 熔断 vs 重试 / 测试 mock 时钟
+- [Ch12 安全与成本](ch12-security-cost.md) —— 中间件顺序(401 带 CORS) / 线程复用要 reset / usage 空值兜底 / 滑动窗口语义 / import 固化配置
 
 ## 按主题速查
 
@@ -20,11 +21,12 @@
 |---|---|
 | SQLite / 数据库 | Ch01、Ch03(迁移)、Ch10(写锁竞争) |
 | SQLAlchemy ORM | Ch10(DetachedInstanceError) |
-| LLM 调用 | Ch02(温度/NULL)、Ch03(超时)、Ch10(写锁跨 LLM)、Ch11(重试/熔断) |
+| LLM 调用 | Ch02(温度/NULL)、Ch03(超时)、Ch10(写锁跨 LLM)、Ch11(重试/熔断)、Ch12(usage 计量) |
 | 前端测试 jsdom | Ch03(matchMedia / ResizeObserver) |
 | React 陷阱 | Ch03(StrictMode 双跑) |
 | 依赖 / 环境 | Ch03(Node 版本)、Ch04(onnxruntime)、Ch10(uv 无 pip) |
 | Docker 部署 | Ch08 |
+| 鉴权 / 限流 / 费用 | Ch12(中间件顺序 / 滑动窗口 / token 计量) |
 
 ## 几条反复出现的底层规律
 

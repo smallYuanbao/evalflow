@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     chat_circuit_failures: int = 5        # 熔断阈值:连续失败 N 次打开熔断
     chat_circuit_cooldown: float = 30.0   # 熔断冷却(秒):冷却后 half-open 探测
     judge_samples: int = 1                # judge 采样次数(>1 取均值更稳,成本×N)
+    # —— Ch12 安全与成本 ——
+    app_api_key: str = ""                 # 平台访问密钥(空 = 不鉴权,本地 dev/测试兼容)
+    rate_limit_runs_per_minute: int = 10  # create_run 限流:每分钟最多发起评测次数(防刷烧钱)
+    chat_price_input_per_1m: float = 2.0  # 输入价(元/百万 token)。deepseek-chat 参考价,按官方实际调
+    chat_price_output_per_1m: float = 8.0 # 输出价(元/百万 token)。deepseek-chat 参考价,按官方实际调
 
     model_config = {"env_file": ".env"}
 

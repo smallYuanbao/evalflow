@@ -69,6 +69,39 @@ class CircuitBreaker:
 
 _circuit = CircuitBreaker(settings.chat_circuit_failures, settings.chat_circuit_cooldown)
 
+# token 计量(Ch12 费用统计):线程局部累计器。每个样本在独立线程跑(Ch10),
+# 线程局部天然隔离;线程池复用线程时靠 reset_usage 重新归零。
+_usage_local = threading.local()
+
+
+def reset_usage() -> None:
+    """重置本线程的 token 累计(每个样本开始前调用,线程复用也能正确隔离)。"""
+    _usage_local.prompt_tokens = 0
+    _usage_local.completion_tokens = 0
+
+
+def get_usage() -> tuple[int, int]:
+    """取本线程累计的 (输入 token, 输出 token)。"""
+    return (
+        getattr(_usage_local, "prompt_tokens", 0),
+        getattr(_usage_local, "completion_tokens", 0),
+    )
+
+
+def _add_usage(r) -> None:
+    """把一次 openai 响应的 usage 累进本线程计量。usage 可能为 None(部分接口/mock 不返回)。"""
+    usage = getattr(r, "usage", None)
+    if usage is None:
+        return
+    _usage_local.prompt_tokens = getattr(_usage_local, "prompt_tokens", 0) + (usage.prompt_tokens or 0)
+    _usage_local.completion_tokens = getattr(_usage_local, "completion_tokens", 0) + (usage.completion_tokens or 0)
+
+
+def compute_cost(prompt_tokens: int, completion_tokens: int) -> float:
+    """按价格表(元/百万 token)算一次评测的 LLM 费用。"""
+    return (prompt_tokens / 1_000_000 * settings.chat_price_input_per_1m
+            + completion_tokens / 1_000_000 * settings.chat_price_output_per_1m)
+
 
 def _backoff(attempt: int) -> float:
     """指数退避 + 抖动:base * 2^attempt,叠加 [0, base) 随机,错峰避免并发惊群。"""
@@ -83,6 +116,7 @@ def _create_with_retry(**kwargs):
         try:
             r = _client.chat.completions.create(**kwargs)
             _circuit.on_success()
+            _add_usage(r)  # 记 token(Ch12 费用统计)
             return r
         except _RETRYABLE as e:
             last_exc = e

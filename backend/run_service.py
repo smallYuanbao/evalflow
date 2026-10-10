@@ -3,6 +3,7 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from backend import llm
 from backend.config import settings
 from backend.db import SessionLocal
 from backend.evaluators import (
@@ -14,7 +15,7 @@ from backend.evaluators import (
     recall,
     rejected,
 )
-from backend.models import DatasetItem, Run, Score, Trace
+from backend.models import DatasetItem, Generation, Run, Score, Trace
 from backend.pipeline import run_pipeline
 from backend.snapshot import config_top_k
 
@@ -70,6 +71,7 @@ def _process_item(run_id: int, item_id: int, input_: str, expected_output: str,
 
     LLM judge 在开 session 前算完:写锁跨 LLM 调用时,并发写 SQLite 会 database is locked。
     """
+    llm.reset_usage()  # 本样本 token 计量归零(线程复用也能正确隔离)
     t0 = time.time()
     out = run_pipeline(input_, top_k)
     latency_ms = int((time.time() - t0) * 1000)
@@ -85,6 +87,10 @@ def _process_item(run_id: int, item_id: int, input_: str, expected_output: str,
         ("answer_correctness", answer_correctness(input_, expected_output, out["output"])),
     ]
 
+    # 本样本「生成 + judge」累计的 token 与费用(算完再开 session,保持事务短)
+    prompt_tokens, completion_tokens = llm.get_usage()
+    cost = round(llm.compute_cost(prompt_tokens, completion_tokens), 6)
+
     s = SessionLocal()
     tr = Trace(run_id=run_id, dataset_item_id=item_id,
                input=input_, output=out["output"],
@@ -93,6 +99,8 @@ def _process_item(run_id: int, item_id: int, input_: str, expected_output: str,
                latency_ms=latency_ms)
     s.add(tr)
     s.flush()
+    s.add(Generation(trace_id=tr.id, model=settings.chat_model,
+                     input_tokens=prompt_tokens, output_tokens=completion_tokens, cost=cost))
     if bucket == ABSENT_BUCKET:
         # 库外题:只评「拒答」(正确行为是不答)
         s.add(Score(trace_id=tr.id, name="rejection", value=rejected(out["output"])))

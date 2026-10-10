@@ -2,7 +2,7 @@ from collections import defaultdict
 
 from backend.db import SessionLocal
 from backend.metrics import METRIC_ORDER
-from backend.models import DatasetItem, Run, Score, Trace
+from backend.models import DatasetItem, Generation, Run, Score, Trace
 
 
 def _avg(vals):
@@ -24,6 +24,15 @@ def aggregate_run(run_id: int) -> dict:
     if traces:
         for sc in s.query(Score).filter(Score.trace_id.in_([tr.id for tr in traces])):
             score_by_trace[sc.trace_id][sc.name] = sc.value
+
+    # 费用汇总(Ch12):累加该 run 所有样本的 token 与费用
+    total_input = total_output = 0
+    total_cost = 0.0
+    if traces:
+        for g in s.query(Generation).filter(Generation.trace_id.in_([tr.id for tr in traces])):
+            total_input += g.input_tokens or 0
+            total_output += g.output_tokens or 0
+            total_cost += g.cost or 0.0
     s.close()
 
     # 动态收集「实际评过」的指标名,按注册表顺序排;注册表外的兜底排最后(未知指标不丢)
@@ -56,4 +65,7 @@ def aggregate_run(run_id: int) -> dict:
         "item_count": len(traces),
         "scores": {m: _avg(overall[m]) for m in ordered},
         "by_bucket": by_bucket,
+        "input_tokens": total_input,
+        "output_tokens": total_output,
+        "cost": round(total_cost, 6),
     }

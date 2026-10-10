@@ -73,6 +73,15 @@ export default function RunDetailView() {
           </span>
         )}
       </h2>
+      <Card title="费用统计" style={{ marginBottom: 16 }}>
+        <Descriptions column={3} size="small">
+          <Descriptions.Item label="输入 Token">{run.input_tokens ?? 0}</Descriptions.Item>
+          <Descriptions.Item label="输出 Token">{run.output_tokens ?? 0}</Descriptions.Item>
+          <Descriptions.Item label="总费用(元)">
+            {run.cost === undefined ? '—' : run.cost.toFixed(6)}
+          </Descriptions.Item>
+        </Descriptions>
+      </Card>
       <Card title="复现上下文" style={{ marginBottom: 16 }}>
         <Descriptions column={2} size="small">
           <Descriptions.Item label="top_k">{cfg.top_k ?? '—'}</Descriptions.Item>
