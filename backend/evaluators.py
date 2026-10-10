@@ -1,4 +1,5 @@
 from backend import llm
+from backend.config import settings
 from backend.prompts import (
     ANSWER_CORRECTNESS_PROMPT,
     ANSWER_RELEVANCE_PROMPT,
@@ -26,15 +27,23 @@ def recall(expected_output: str, retrieved_context: str) -> float:
 
 
 def _judge(prompt: str) -> dict | None:
-    """LLM judge 公共函数:chat_json 打分 + 夹逼到 [0,1]。失败返回 None(记 NULL 不记 0)。"""
-    try:
-        raw = llm.chat_json([{"role": "user", "content": prompt}], temperature=0.0)
-        if raw is None or "score" not in raw:
-            return None
-        score = min(max(float(raw["score"]), 0.0), 1.0)
-        return {"score": round(score, 4), "reason": str(raw.get("reason", ""))}
-    except Exception:
+    """LLM judge:采样 judge_samples 次取均值(更稳),全部失败返回 None(记 NULL 不记 0)。"""
+    scores: list[float] = []
+    reason = ""
+    for _ in range(max(1, settings.judge_samples)):
+        try:
+            raw = llm.chat_json([{"role": "user", "content": prompt}], temperature=0.0)
+            if raw is None or "score" not in raw:
+                continue
+            score = min(max(float(raw["score"]), 0.0), 1.0)
+            scores.append(score)
+            if not reason:
+                reason = str(raw.get("reason", ""))
+        except Exception:
+            continue
+    if not scores:
         return None
+    return {"score": round(sum(scores) / len(scores), 4), "reason": reason}
 
 
 def faithfulness(output: str, retrieved_context: str) -> dict | None:

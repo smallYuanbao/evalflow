@@ -53,3 +53,22 @@ def test_all_five_judges(monkeypatch):
     assert evaluators.context_recall("q", "e", "c")["score"] == 0.5
     assert evaluators.answer_relevance("q", "a")["score"] == 0.5
     assert evaluators.answer_correctness("q", "e", "a")["score"] == 0.5
+
+
+def test_judge_samples_average(monkeypatch):
+    # judge_samples=3 时采样 3 次取均值(Ch11 校准)
+    monkeypatch.setattr(evaluators.settings, "judge_samples", 3)
+    scores = iter([0.6, 0.9, 1.0])
+    monkeypatch.setattr(evaluators.llm, "chat_json",
+                        lambda *a, **kw: {"score": next(scores), "reason": "ok"})
+    r = evaluators.faithfulness("a", "c")
+    assert r["score"] == round((0.6 + 0.9 + 1.0) / 3, 4)
+
+
+def test_judge_samples_skip_failures(monkeypatch):
+    # 中间一次采样失败,用成功的取均值
+    monkeypatch.setattr(evaluators.settings, "judge_samples", 3)
+    results = iter([{"score": 0.6}, None, {"score": 1.0}])  # 第二次失败
+    monkeypatch.setattr(evaluators.llm, "chat_json", lambda *a, **kw: next(results))
+    r = evaluators.faithfulness("a", "c")
+    assert r["score"] == round((0.6 + 1.0) / 2, 4)

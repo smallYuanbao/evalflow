@@ -13,6 +13,12 @@ class Settings(BaseSettings):
     chroma_port: int = 8000                         # chroma 服务端口
     redis_url: str = "redis://localhost:6379/0"     # Celery broker/backend(评测任务队列)
     run_concurrency: int = 4                        # 单个 run 内样本并发数(LLM 是 IO 密集,线程合适)
+    # —— Ch11 LLM 可靠性 ——
+    chat_retries: int = 3                 # 可重试错误(超时/429/5xx)的重试次数,最多 4 次尝试
+    chat_retry_base: float = 0.5          # 指数退避基数(秒):0.5/1/2/4... + 抖动
+    chat_circuit_failures: int = 5        # 熔断阈值:连续失败 N 次打开熔断
+    chat_circuit_cooldown: float = 30.0   # 熔断冷却(秒):冷却后 half-open 探测
+    judge_samples: int = 1                # judge 采样次数(>1 取均值更稳,成本×N)
 
     model_config = {"env_file": ".env"}
 
