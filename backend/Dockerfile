@@ -22,6 +22,12 @@ COPY backend ./backend
 COPY alembic.ini ./alembic.ini
 COPY migrations ./migrations
 
+# 非 root 运行(Ch14 交付加固):建独立用户,数据目录归它所有;命名卷首次挂载会继承这里的属主
+RUN useradd --create-home --uid 1000 evalflow \
+    && mkdir -p /app/data \
+    && chown -R evalflow:evalflow /app/data
+USER evalflow
+
 EXPOSE 8000
 # migrate-then-serve:先跑迁移再起服务(生产正确姿势;本地 dev 仍走 lifespan 的 init_db 自动迁移)
 CMD ["sh", "-c", "alembic upgrade head && uvicorn backend.main:app --host 0.0.0.0 --port 8000"]

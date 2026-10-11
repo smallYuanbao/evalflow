@@ -49,11 +49,11 @@ async def auth_middleware(request: Request, call_next):
     return await call_next(request)
 
 
-# 前端 dev 在 5173,前后端分离要显式开 CORS(真实项目这是必答题)。
+# 前端 dev 在 5173,e2e 用 5174(docker 前端容器占 5173),都要显式开 CORS(真实项目这是必答题)。
 # 最后注册 = 最外层,让所有响应(含 401)都过一遍 CORS 加头。
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "http://localhost:5174"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -164,7 +164,12 @@ def create_run(body: RunIn):
     s.refresh(run)
     rid = run.id
     s.close()
-    run_task.delay(rid)  # 入队由 Celery worker 消费(Ch10),不再用进程内 BackgroundTasks
+    if settings.e2e_mock:
+        # E2E 下同步执行,不走 celery/redis(Ch14):发完即 done,测试无需起 worker
+        from backend.run_service import execute_run
+        execute_run(rid)
+    else:
+        run_task.delay(rid)  # 入队由 Celery worker 消费(Ch10),不再用进程内 BackgroundTasks
     return {"id": rid, "status": "running"}
 
 

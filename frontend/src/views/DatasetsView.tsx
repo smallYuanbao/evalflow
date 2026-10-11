@@ -22,7 +22,6 @@ export default function DatasetsView() {
       <Result status="error" title="加载失败" subTitle={error} extra={<Button onClick={reload}>重试</Button>} />
     )
   if (loading && !data) return <Skeleton active paragraph={{ rows: 6 }} />
-  if (!data?.items.length) return <Empty description="还没有评测集" />
 
   const create = async () => {
     if (!name.trim()) return // 名称为空不允许新建
@@ -37,38 +36,43 @@ export default function DatasetsView() {
 
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="large">
+      {/* 按钮始终渲染:空库时也不能挡住首次「新建评测集」入口(曾因 Empty 提前 return 被隐藏) */}
       <Button type="primary" onClick={() => setOpen(true)}>
         新建评测集
       </Button>
-      <Table
-        rowKey="id"
-        loading={loading}
-        dataSource={data.items}
-        pagination={{
-          current: page,
-          pageSize,
-          total: data.total,
-          showSizeChanger: true,
-          onChange: (p, ps) => {
-            setPage(p)
-            setPageSize(ps)
-          },
-        }}
-        columns={[
-          { title: '名称', dataIndex: 'name' },
-          { title: '描述', dataIndex: 'description' },
-          { title: '样本数', dataIndex: 'item_count' },
-          {
-            title: '操作',
-            key: 'action',
-            render: (_: unknown, d: Dataset) => (
-              <Button type="link" size="small" onClick={() => nav(`/datasets/${d.id}`)}>
-                查看
-              </Button>
-            ),
-          },
-        ]}
-      />
+      {!data?.items.length ? (
+        <Empty description="还没有评测集" />
+      ) : (
+        <Table
+          rowKey="id"
+          loading={loading}
+          dataSource={data.items}
+          pagination={{
+            current: page,
+            pageSize,
+            total: data.total,
+            showSizeChanger: true,
+            onChange: (p, ps) => {
+              setPage(p)
+              setPageSize(ps)
+            },
+          }}
+          columns={[
+            { title: '名称', dataIndex: 'name' },
+            { title: '描述', dataIndex: 'description' },
+            { title: '样本数', dataIndex: 'item_count' },
+            {
+              title: '操作',
+              key: 'action',
+              render: (_: unknown, d: Dataset) => (
+                <Button type="link" size="small" onClick={() => nav(`/datasets/${d.id}`)}>
+                  查看
+                </Button>
+              ),
+            },
+          ]}
+        />
+      )}
       <Modal
         open={open}
         title="新建评测集"

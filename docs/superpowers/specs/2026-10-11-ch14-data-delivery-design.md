@@ -77,31 +77,39 @@ SQLAlchemy 2.x 同时支持两者。选 `psycopg[binary]`:
 
 ## 数据层主线:验收
 
-- [ ] `alembic upgrade head` 对**全新 SQLite** 建出 6 张表 + `alembic_version`,且 schema 与模型一致。
-- [ ] `alembic upgrade head` 对**真 PostgreSQL**(docker)建出同样 schema。
-- [ ] 现有 54 个后端测试全绿(默认 SQLite 路径不受影响)。
-- [ ] 存量 `data/eval.db` 能被 `init_db()` 平滑收养(stamp),不再报「表已存在」。
-- [ ] `docker compose up`(无 profile)仍可起,行为不变。
+- [x] `alembic upgrade head` 对**全新 SQLite** 建出 6 张表 + `alembic_version`,且 schema 与模型一致。
+- [x] `alembic upgrade head` 对**真 PostgreSQL**(docker)建出同样 schema。
+- [x] 现有 54 个后端测试全绿(默认 SQLite 路径不受影响),另加 2 个 `test_db` 后 56 个。
+- [x] 存量 `data/eval.db` 能被 `init_db()` 平滑收养(stamp),不再报「表已存在」。
+- [x] `docker compose up`(无 profile)仍可起,行为不变。
 
-## 交付主线(Ch14 后半,本节只记决策,实施时再细化)
+## 交付主线(Ch14 后半)
 
 ### CI/CD(GitHub Actions,仓库现无 remote → 写好待 push)
 
-- 一个 workflow,三 job:backend(uv 装依赖 + `pytest`)、frontend(`npm ci` + `vitest run` + `tsc -b`)、image(build 两个镜像)。
-- 本地等价命令先跑绿:pytest / vitest / `docker compose build`。
+- 一个 workflow,四 job(比初稿多 e2e):backend(`uv sync` + `pytest`)、frontend(`npm ci` + `vitest` + `build` + `lint`)、build(`docker compose build`)、e2e(`uv sync` + `npm ci` + `playwright install --with-deps chromium` + `playwright test`)。
+- 本地等价命令先跑绿:pytest(56)/ vitest(12)/ `npm run build` / `npx playwright test` / `docker compose build`。
 - 用 uv(pyproject + uv.lock 已就绪),不重复造 requirements.txt。
 
 ### Playwright e2e(完整主流程)
 
-- 覆盖「建评测集 → 发评测 → 看结果」。
-- 后端加 **E2E mock 开关**(如 `E2E_MOCK_LLM=1`):替换 `run_pipeline` 为确定性假实现,不烧钱、不依赖 Ollama/DeepSeek。
-- 本地可跑;CI 里是否跑完整栈(起 postgres+backend+frontend)单独评估。
+- 覆盖「建评测集 → 发评测 → 看结果」四步:造集 → 加样本 → 发评测 → 看结果(状态 done / 费用统计 / 指标卡)。
+- 后端加 **`E2E_MOCK` 开关**:替换 `run_pipeline` 与 5 个 LLM judge 为确定性假实现(`score=0.8`),并把 `create_run` 从 `run_task.delay` 切到进程内同步 `execute_run`,不烧钱、不依赖 Ollama/DeepSeek/Redis。
+- `playwright.config.ts` 用 `webServer` 自动拉起后端(E2E_MOCK=1,8001)+ 前端 vite(5174);两端口用专用值且 `reuseExistingServer:false`,避开 docker 映射的 8000/5173,避免复用旧容器。
 
 ### 交付加固
 
-- **非 root**:两个 Dockerfile 加非 root 用户(`useradd` + `USER`),减少容器逃逸面。
-- **健康检查**:backend(`/health`)、frontend(nginx 80)、postgres(`pg_isready`)加 `healthcheck`。
-- **HTTPS**:用 nginx 侧 TLS 终结(自签证书本地验证 / 生产挂真实证书),或 Caddy 自动 HTTPS;二选一,实施时定。
+- **非 root**:backend 镜像 `useradd --uid 1000 evalflow` + `USER evalflow`;frontend 用官方 `nginx:alpine`(已是非 root master)。
+- **健康检查**:backend(`/health`,urllib)、frontend(nginx 80,wget)、postgres(`pg_isready`)加 `healthcheck`。
+- **HTTPS**:选 **nginx 侧 TLS 终结**(放弃 Caddy——不引新运行时)。`nginx.conf` 同一 server 块 `listen 80` + `listen 443 ssl`;证书由 `/docker-entrypoint.d/40-gen-cert.sh` 在证书缺失时用 `openssl` 自签(`/CN=localhost`,365 天)落到命名卷 `certs_data`;生产把真实证书挂到同一路径覆盖即可,脚本不会覆盖已存在证书。
+
+## 交付主线:验收
+
+- [x] `npx playwright test` 全绿(主流程四步通过)。
+- [x] pytest 56 / vitest 12 全绿,`npm run build` 成功。
+- [x] `docker compose build` 两镜像构建成功(backend `useradd`、frontend `openssl` 均可用)。
+- [x] `docker compose config` 校验通过(healthcheck / 443 / certs 卷)。
+- [x] CI workflow 与本地等价命令一一对应,待 push 后触发。
 
 ## 本章不做(超出 demo 量级)
 

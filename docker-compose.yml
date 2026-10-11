@@ -28,6 +28,12 @@ services:
     depends_on:
       - chroma
       - redis
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   frontend:
     build:
@@ -35,8 +41,16 @@ services:
       dockerfile: frontend/Dockerfile
     ports:
       - "5173:80"
+      - "443:443" # HTTPS(Ch14):自签证书,浏览器会告警;curl -k https://localhost 可验证
+    volumes:
+      - certs_data:/etc/nginx/certs # 自签证书落盘,重启不重签;生产挂真实证书覆盖
     depends_on:
       - backend
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   redis:
     image: redis:7-alpine
@@ -84,3 +98,4 @@ volumes:
   chroma_data:
   sqlite_data:
   pg_data:
+  certs_data:

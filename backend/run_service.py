@@ -23,6 +23,13 @@ logger = logging.getLogger(__name__)
 
 ABSENT_BUCKET = "库外"  # 库外题:知识库里没有答案,正确行为是拒答
 
+if settings.e2e_mock:
+    # E2E 下替换 pipeline 与 5 个 LLM judge 为确定性假实现(Ch14);recall/rejected 是机械基线,保持真实
+    from backend.e2e_mock import mock_judge, mock_run_pipeline
+
+    run_pipeline = mock_run_pipeline
+    faithfulness = context_precision = context_recall = answer_relevance = answer_correctness = mock_judge
+
 
 def execute_run(run_id: int) -> None:
     """并发调度:线程池并发跑样本,主线程收结果更新进度;全成 done,任一异常 failed。

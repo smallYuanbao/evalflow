@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     rate_limit_runs_per_minute: int = 10  # create_run 限流:每分钟最多发起评测次数(防刷烧钱)
     chat_price_input_per_1m: float = 2.0  # 输入价(元/百万 token)。deepseek-chat 参考价,按官方实际调
     chat_price_output_per_1m: float = 8.0 # 输出价(元/百万 token)。deepseek-chat 参考价,按官方实际调
+    # —— Ch14 交付硬化 ——
+    e2e_mock: bool = False  # E2E 开关:替换 run_pipeline/judge 为确定性假实现,并同步执行(不走 celery)
 
     model_config = {"env_file": ".env"}
 
