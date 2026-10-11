@@ -33,7 +33,8 @@ test('主流程:造评测集 → 发评测 → 看结果', async ({ page }) => {
   await page.locator('tr', { hasText: dsName }).getByRole('button', { name: '查看' }).click()
   await expect(page).toHaveURL(/\/runs\/\d+/)
   await expect(page.getByText('费用统计')).toBeVisible()
-  await expect(page.getByText('done')).toBeVisible()
+  // 状态「done」限到 header 里的 Tag:门禁卡基线选择器标签也含 (done),getByText 会撞
+  await expect(page.locator('h2').getByText('done')).toBeVisible()
   // 「忠实度」出现在指标卡标题/表格表头/单元格多处,精确定位到指标卡标题
   await expect(page.locator('.ant-statistic-title', { hasText: '忠实度' })).toBeVisible()
 })

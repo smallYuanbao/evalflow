@@ -6,7 +6,12 @@ import { api } from '../../api'
 import RunDetailView from '../RunDetailView'
 
 vi.mock('../../api', () => ({
-  api: { getRun: vi.fn(), listTraces: vi.fn().mockResolvedValue([]) },
+  api: {
+    getRun: vi.fn(),
+    listTraces: vi.fn().mockResolvedValue([]),
+    listRuns: vi.fn().mockResolvedValue([]), // 门禁卡基线选择器
+    getRunGate: vi.fn().mockResolvedValue({ passed: true, checks: [], run_id: 1, baseline_run_id: null }),
+  },
 }))
 
 test('展示多维指标(动态渲染卡片 + 分桶列)', async () => {
@@ -48,7 +53,7 @@ test('展示多维指标(动态渲染卡片 + 分桶列)', async () => {
   expect(screen.getAllByText('上下文精度').length).toBeGreaterThan(0)
   expect(screen.getAllByText('答案正确性').length).toBeGreaterThan(0)
   expect(screen.queryByText('拒答率')).not.toBeInTheDocument() // 库内 run 没评拒答
-  expect(screen.getByRole('combobox')).toBeInTheDocument() // 分桶图指标切换下拉(Ch07)
+  expect(screen.getAllByRole('combobox').length).toBeGreaterThan(0) // 分桶图指标切换下拉(Ch07)+ 门禁基线选择器
 })
 
 test('指标全 NULL 时分桶图显示空态(不渲染图表)', async () => {
@@ -102,4 +107,41 @@ test('展示复现上下文快照(Ch09)', async () => {
   expect(screen.getByText('Prompt 版本')).toBeInTheDocument()
   expect(screen.getByText('deepseek-chat')).toBeInTheDocument()
   expect(screen.getByText('abcd1234')).toBeInTheDocument() // 知识库哈希截断前 8 位
+})
+
+test('展示回归门禁(Ch15):FAIL 徽章 + 逐指标判定', async () => {
+  vi.mocked(api.getRun).mockResolvedValue({
+    id: 4,
+    dataset_id: 1,
+    status: 'done',
+    config: '{}',
+    item_count: 1,
+    scores: { recall: 0.75, faithfulness: 0.62 },
+    by_bucket: { 护理: { count: 1, recall: 0.75, faithfulness: 0.62 } },
+  })
+  vi.mocked(api.getRunGate).mockResolvedValue({
+    passed: false,
+    run_id: 4,
+    baseline_run_id: null,
+    checks: [
+      {
+        metric: 'faithfulness',
+        value: 0.62,
+        threshold: 0.7,
+        baseline_value: null,
+        delta: null,
+        passed: false,
+        note: '低于阈值',
+      },
+    ],
+  })
+  render(
+    <MemoryRouter initialEntries={['/runs/4']}>
+      <Routes>
+        <Route path="/runs/:runId" element={<RunDetailView />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  await waitFor(() => expect(screen.getByText('FAIL 不通过')).toBeInTheDocument())
+  expect(screen.getByText('低于阈值')).toBeInTheDocument()
 })

@@ -65,6 +65,24 @@ export interface RunTrend {
   scores: Record<string, number | null>
 }
 
+// 回归门禁(Ch15):逐指标判定 + 整体结论
+export interface GateCheck {
+  metric: string
+  value: number | null
+  threshold: number
+  baseline_value: number | null
+  delta: number | null
+  passed: boolean
+  note: string | null
+}
+
+export interface GateResult {
+  passed: boolean
+  checks: GateCheck[]
+  run_id: number
+  baseline_run_id: number | null
+}
+
 export interface KnowledgeChunk {
   id: string
   text: string

@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Button, Card, Descriptions, Result, Select, Skeleton, Table, Tag, message } from 'antd'
 import { api } from '../api'
 import { useRequest } from '../hooks/useRequest'
+import type { GateCheck } from '../types'
 import MetricCard from '../components/MetricCard'
 import BucketChart from '../components/BucketChart'
 
@@ -37,6 +38,22 @@ export default function RunDetailView() {
   const { data: run, loading, error, reload } = useRequest((s) => api.getRun(id, s), [id])
   const { data: traces } = useRequest((s) => api.listTraces(id, s), [id])
   const [chartMetric, setChartMetric] = useState<string | null>(null)
+
+  // 回归门禁(Ch15):基线选择 + 门禁结果;默认基线 = 最近一个非本 run 的 done run
+  const [baselineId, setBaselineId] = useState<number | null>(null)
+  const baselineInit = useRef(false)
+  const { data: runList } = useRequest((s) => api.listRuns(s), [])
+  const { data: gate, loading: gateLoading } = useRequest(
+    (s) => api.getRunGate(id, baselineId ?? undefined, s),
+    [id, baselineId],
+  )
+
+  useEffect(() => {
+    if (baselineInit.current || !runList?.length) return
+    const prev = runList.find((r) => r.status === 'done' && r.id !== id)
+    if (prev) setBaselineId(prev.id)
+    baselineInit.current = true // 只自动选一次,之后尊重用户手动改
+  }, [runList, id])
 
   // 导出 CSV(Ch13):带鉴权头走 axios 拉文本,再 Blob 触发浏览器下载
   const exportCsv = async () => {
@@ -92,6 +109,59 @@ export default function RunDetailView() {
         </h2>
         <Button onClick={exportCsv}>导出 CSV</Button>
       </div>
+      <Card
+        title="回归门禁"
+        extra={
+          <Select
+            size="small"
+            style={{ width: 240 }}
+            value={baselineId ?? undefined}
+            placeholder="选择基线 run"
+            allowClear
+            onChange={(v) => setBaselineId(v ?? null)}
+            options={(runList ?? []).map((r) => ({
+              value: r.id,
+              label: `Run #${r.id} (${r.status})${r.dataset_name ? ' · ' + r.dataset_name : ''}`,
+            }))}
+          />
+        }
+        style={{ marginBottom: 16 }}
+      >
+        {gateLoading && !gate ? (
+          <Skeleton active paragraph={{ rows: 3 }} />
+        ) : gate ? (
+          <>
+            <div style={{ marginBottom: 12 }}>
+              <Tag color={gate.passed ? 'green' : 'red'} style={{ fontSize: 14, padding: '2px 10px' }}>
+                {gate.passed ? 'PASS 通过' : 'FAIL 不通过'}
+              </Tag>
+              {gate.baseline_run_id != null && (
+                <span style={{ marginLeft: 8, color: '#888' }}>对比基线 Run #{gate.baseline_run_id}</span>
+              )}
+            </div>
+            <Table<GateCheck>
+              rowKey="metric"
+              size="small"
+              pagination={false}
+              dataSource={gate.checks}
+              columns={[
+                { title: '指标', dataIndex: 'metric', render: (m: string) => METRIC_LABELS[m] ?? m },
+                { title: '当前值', dataIndex: 'value', render: fmt },
+                { title: '阈值(≥)', dataIndex: 'threshold' },
+                { title: '基线值', dataIndex: 'baseline_value', render: (v: number | null) => (v == null ? '—' : v.toFixed(4)) },
+                { title: '变化', dataIndex: 'delta', render: (d: number | null) => (d == null ? '—' : (d >= 0 ? '+' : '') + d.toFixed(4)) },
+                {
+                  title: '判定',
+                  dataIndex: 'passed',
+                  render: (p: boolean, rec: GateCheck) => (
+                    <Tag color={p ? 'green' : 'red'}>{p ? '通过' : rec.note ?? '不通过'}</Tag>
+                  ),
+                },
+              ]}
+            />
+          </>
+        ) : null}
+      </Card>
       <Card title="费用统计" style={{ marginBottom: 16 }}>
         <Descriptions column={3} size="small">
           <Descriptions.Item label="输入 Token">{run.input_tokens ?? 0}</Descriptions.Item>

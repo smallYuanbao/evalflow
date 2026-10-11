@@ -1,6 +1,6 @@
 // 类型化接口方法(不再手写 header,统一走 client)
 import { request } from './client'
-import type { Dataset, DatasetItem, DatasetPage, KnowledgeMap, Run, RunDetail, RunTrend, TraceRow } from '../types'
+import type { Dataset, DatasetItem, DatasetPage, GateResult, KnowledgeMap, Run, RunDetail, RunTrend, TraceRow } from '../types'
 
 export const api = {
   // 读接口都收 signal(useRequest 用来打断上次请求);写接口一次性触发,不收
@@ -23,6 +23,10 @@ export const api = {
   listRuns: (signal?: AbortSignal) => request<Run[]>('/runs', { signal }),
   getRun: (id: number, signal?: AbortSignal) => request<RunDetail>(`/runs/${id}`, { signal }),
   listRunsTrend: (signal?: AbortSignal) => request<RunTrend[]>('/runs/trend', { signal }),
+  getRunGate: (id: number, baselineId?: number, signal?: AbortSignal) => {
+    const qs = baselineId != null ? `?baseline_run_id=${baselineId}` : ''
+    return request<GateResult>(`/runs/${id}/gate${qs}`, { signal })
+  },
   exportRunCsv: (id: number) => request<string>(`/runs/${id}/export`),
   listTraces: (id: number, signal?: AbortSignal) => request<TraceRow[]>(`/runs/${id}/traces`, { signal }),
   getKnowledgeMap: (signal?: AbortSignal) => request<KnowledgeMap>('/knowledge/map', { signal }),

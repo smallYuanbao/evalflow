@@ -15,6 +15,7 @@ from backend.models import Dataset, DatasetItem, Run, Score, Trace, _now
 from backend.ratelimit import run_limiter
 from backend.snapshot import build_snapshot, config_top_k
 from backend.stats import aggregate_run, run_export_csv, runs_trend
+from backend.gate import evaluate_gate
 
 
 @asynccontextmanager
@@ -201,6 +202,30 @@ def get_runs_trend(limit: int = 50):
 @app.get("/runs/{run_id}")
 def get_run(run_id: int):
     return aggregate_run(run_id)
+
+
+@app.get("/runs/{run_id}/gate")
+def get_run_gate(run_id: int, baseline_run_id: int | None = None):
+    """回归门禁(Ch15):对 run 聚合指标套规则,给 PASS/FAIL;可选基线 run 做相对回归。
+
+    读时计算、不落库;baseline 不存在返回 404(「和谁比」由调用方显式指定)。
+    """
+    s = SessionLocal()
+    run_exists = s.get(Run, run_id) is not None
+    baseline_exists = baseline_run_id is None or s.get(Run, baseline_run_id) is not None
+    s.close()
+    if not run_exists:
+        raise HTTPException(status_code=404, detail="run 不存在")
+    if not baseline_exists:
+        raise HTTPException(status_code=404, detail="基线 run 不存在")
+
+    scores = aggregate_run(run_id)["scores"]
+    baseline_scores = aggregate_run(baseline_run_id)["scores"] if baseline_run_id is not None else None
+    return {
+        **evaluate_gate(scores, baseline_scores),
+        "run_id": run_id,
+        "baseline_run_id": baseline_run_id,
+    }
 
 
 @app.get("/runs/{run_id}/export")
