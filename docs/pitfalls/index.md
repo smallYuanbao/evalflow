@@ -15,6 +15,7 @@
 - [Ch11 LLM 可靠性](ch11-llm-reliability.md) —— openai 异常构造 / before_call 放 try 外 / 4xx 不算故障 / 熔断 vs 重试 / 测试 mock 时钟
 - [Ch12 安全与成本](ch12-security-cost.md) —— 中间件顺序(401 带 CORS) / 线程复用要 reset / usage 空值兜底 / 滑动窗口语义 / import 固化配置
 - [Ch13 可观测性](ch13-observability.md) —— 路由顺序(静态 vs 动态) / DetachedInstanceError 复发 / CSV 要 BOM / setup_logging 幂等
+- [Ch14 交付硬化](ch14-delivery-hardening.md) —— e2e 端口隔离 / antd Select placeholder / 空态隐藏按钮 / vitest 误拾取 / nginx 启动期解析
 
 ## 按主题速查
 
@@ -24,9 +25,11 @@
 | SQLAlchemy ORM | Ch10(DetachedInstanceError)、Ch13(复发) |
 | LLM 调用 | Ch02(温度/NULL)、Ch03(超时)、Ch10(写锁跨 LLM)、Ch11(重试/熔断)、Ch12(usage 计量) |
 | 前端测试 jsdom | Ch03(matchMedia / ResizeObserver) |
-| React 陷阱 | Ch03(StrictMode 双跑) |
+| React 陷阱 | Ch03(StrictMode 双跑)、Ch14(空态提前 return 藏按钮) |
 | 依赖 / 环境 | Ch03(Node 版本)、Ch04(onnxruntime)、Ch10(uv 无 pip) |
-| Docker 部署 | Ch08 |
+| Docker 部署 | Ch08、Ch14(nginx 静态 upstream 启动期解析) |
+| e2e / Playwright | Ch14(端口隔离 / reuseExistingServer / antd Select placeholder) |
+| 测试工具边界 | Ch14(vitest 误拾取 e2e 用例) |
 | 鉴权 / 限流 / 费用 | Ch12(中间件顺序 / 滑动窗口 / token 计量) |
 | 可观测性 / 路由 / 编码 | Ch13(路由顺序 / CSV BOM / 日志幂等) |
 
@@ -37,3 +40,4 @@
 3. **「没评上」≠「零分」**——用 NULL 区分,聚合时跳过,别让失败样本污染均值(Ch01/Ch02)。
 4. **确定性任务关随机性**——judge 温度 0、拒答用机械关键词,能机械的就别上 LLM(Ch02)。
 5. **环境/版本要显式**——依赖 pin 版本、Node 选对版本、onnxruntime 按架构 pin(Ch03/Ch04)。
+6. **测试/部署上下文要隔离**——e2e 别复用旧服务、两套测试框架划清边界、容器反代只在 compose 网络里成立(Ch14)。
