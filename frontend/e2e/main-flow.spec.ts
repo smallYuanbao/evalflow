@@ -17,7 +17,10 @@ test('主流程:造评测集 → 发评测 → 看结果', async ({ page }) => {
   await page.locator('tr', { hasText: dsName }).getByRole('button', { name: '查看' }).click()
   await expect(page).toHaveURL(/\/datasets\/\d+/)
   await page.getByLabel(/问题/).fill('宝宝发烧怎么办?')
-  await page.getByPlaceholder('期望要点(用/分隔)').fill('物理降温/就医')
+  await page.getByLabel(/期望要点/).fill('物理降温/就医')
+  // 分桶必选(Ch24):不选的话样本会被当库内题,评分方式就错了
+  await page.getByRole('combobox').click()
+  await page.locator('.ant-select-item-option', { hasText: '护理' }).click()
   await page.getByRole('button', { name: '加样本' }).click()
   await expect(page.getByText('已添加')).toBeVisible()
 

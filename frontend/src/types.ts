@@ -153,6 +153,7 @@ export interface KnowledgeChunk {
 
 export interface KnowledgeQuery {
   input: string
+  bucket?: string // 分桶(Ch23):用于看「库外题是否聚在边缘」
   x: number
   y: number
 }

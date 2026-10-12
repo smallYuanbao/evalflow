@@ -159,7 +159,7 @@ def test_run_export_route():
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/csv")
     assert "attachment" in r.headers["content-disposition"]
-    assert "trace_id" in r.text
+    assert "样本ID" in r.text  # 表头中文(Ch24)
 
     assert client.get("/runs/999999/export").status_code == 404  # 无明细 → 404
 

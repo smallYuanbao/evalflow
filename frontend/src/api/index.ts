@@ -33,7 +33,6 @@ export const api = {
     const qs = baselineId != null ? `?baseline_run_id=${baselineId}` : ''
     return request<GateResult>(`/runs/${id}/gate${qs}`, { signal })
   },
-  exportRunCsv: (id: number) => request<string>(`/runs/${id}/export`),
   getRunDiff: (a: number, b: number, signal?: AbortSignal) => request<RunDiffResult>(`/runs/${a}/diff/${b}`, { signal }),
   getRunCalibration: (id: number, signal?: AbortSignal) => request<CalibrationResult>(`/runs/${id}/calibration`, { signal }),
   getBucketAttribution: (id: number, baselineId: number, signal?: AbortSignal) =>

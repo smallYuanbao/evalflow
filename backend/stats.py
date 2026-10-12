@@ -3,7 +3,7 @@ import io
 from collections import defaultdict
 
 from backend.db import SessionLocal
-from backend.metrics import METRIC_ORDER
+from backend.metrics import METRIC_LABELS, METRIC_ORDER
 from backend.models import Dataset, DatasetItem, Generation, Run, Score, Trace
 
 
@@ -121,26 +121,39 @@ def runs_trend(limit: int = 50, dataset_id: int | None = None) -> list[dict]:
     return out
 
 
-def run_export_csv(run_id: int) -> str:
-    """导出某 run 的逐 trace 明细为 CSV(Ch13 供外部分析)。空 run 返回空串。"""
-    s = SessionLocal()
-    traces = s.query(Trace).filter(Trace.run_id == run_id).order_by(Trace.id).all()
-    if not traces:
-        s.close()
-        return ""
-    score_by_trace = defaultdict(dict)
-    for sc in s.query(Score).filter(Score.trace_id.in_([t.id for t in traces])):
-        score_by_trace[sc.trace_id][sc.name] = sc.value
-    s.close()
-
-    # 指标列 = 该 run 实际出现的指标,按注册表顺序(与 aggregate_run 一致)
-    present = {name for t in traces for name in score_by_trace.get(t.id, {})}
-    metrics = [m for m in METRIC_ORDER if m in present] + [m for m in present if m not in METRIC_ORDER]
-
+def _csv_line(cells: list) -> str:
+    """把一行 cells 渲染成 CSV 文本(含换行符),含逗号/引号/换行的字段自动加引号转义。"""
     buf = io.StringIO()
-    w = csv.writer(buf)
-    w.writerow(["trace_id", "input", "output", "latency_ms"] + metrics)
-    for t in traces:
-        w.writerow([t.id, t.input, t.output, t.latency_ms]
-                   + [score_by_trace.get(t.id, {}).get(m, "") for m in metrics])
+    csv.writer(buf).writerow(cells)
     return buf.getvalue()
+
+
+def run_export_csv_stream(run_id: int):
+    """流式产出 CSV(Ch25):逐行 yield,内存不随总行数增长。
+
+    为什么必须流式:原实现把全部 Trace 用 .all() 拉进内存、再拼成整份字符串——样本一多,
+    后端内存是 CSV 大小的 2~3 倍。这里改为:
+      · 分数是小标量(trace_id/name/value),一次取走不心疼;
+      · 真正占内存的 trace 正文(input/output)用 yield_per 分批取,一次只驻留一批。
+    """
+    s = SessionLocal()
+    try:
+        score_by_trace: dict[int, dict] = defaultdict(dict)
+        for tid, name, value in (
+            s.query(Score.trace_id, Score.name, Score.value)
+            .join(Trace, Score.trace_id == Trace.id)
+            .filter(Trace.run_id == run_id)
+        ):
+            score_by_trace[tid][name] = value
+
+        present = {n for d in score_by_trace.values() for n in d}
+        metrics = [m for m in METRIC_ORDER if m in present] + [m for m in present if m not in METRIC_ORDER]
+
+        yield _csv_line(["样本ID", "问题", "回答", "耗时(ms)"] + [METRIC_LABELS.get(m, m) for m in metrics])
+
+        # yield_per:分批从库里取,不在内存里堆积整表的正文
+        for t in s.query(Trace).filter(Trace.run_id == run_id).order_by(Trace.id).yield_per(500):
+            sc = score_by_trace.get(t.id, {})
+            yield _csv_line([t.id, t.input, t.output, t.latency_ms] + [sc.get(m, "") for m in metrics])
+    finally:
+        s.close()

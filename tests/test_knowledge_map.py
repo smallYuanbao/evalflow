@@ -39,17 +39,21 @@ def test_recent_unique_inputs_dedupes_and_limits():
     s.close()
 
     out = km._recent_unique_inputs(3)
-    assert len(out) == 3                # 上限生效
-    assert len(out) == len(set(out))    # 去重
-    assert out[0] == "km-c"             # 最新的排最前(id desc)
+    inputs = [o["input"] for o in out]
+    assert len(out) == 3                     # 上限生效
+    assert len(inputs) == len(set(inputs))   # 去重
+    assert inputs[0] == "km-c"               # 最新的排最前(id desc)
+    assert all("bucket" in o for o in out)   # 带上分桶(Ch23)
 
 
 def test_knowledge_map_shape(monkeypatch):
     km._chunk_cache = None
     monkeypatch.setattr(km, "embed", _fake_embed)
-    monkeypatch.setattr(km, "_recent_unique_inputs", lambda limit: ["q1"])
+    monkeypatch.setattr(km, "_recent_unique_inputs", lambda limit: [{"input": "q1", "bucket": "护理"}])
     data = km.knowledge_map()
     assert len(data["chunks"]) == len(km.KNOWLEDGE)
     assert all({"id", "text", "category", "x", "y"} <= set(c) for c in data["chunks"])
-    assert data["queries"] == [{"input": "q1", "x": data["queries"][0]["x"], "y": data["queries"][0]["y"]}]
+    q = data["queries"][0]
+    assert q["input"] == "q1" and q["bucket"] == "护理"  # 带上分桶(Ch23)
+    assert {"x", "y"} <= set(q)
     km._chunk_cache = None

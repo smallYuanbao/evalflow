@@ -1,27 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Button, Card, Descriptions, Result, Select, Skeleton, Space, Table, Tag, message } from 'antd'
+import { Button, Card, Descriptions, Result, Select, Skeleton, Space, Table, Tag, Tooltip, message } from 'antd'
 import { api } from '../api'
+import { exportRunCsvUrl } from '../api/client'
 import { useRequest } from '../hooks/useRequest'
 import { useRunCompletionNotice } from '../hooks/useRunCompletionNotice'
 import type { BucketAttribution, GateCheck, TraceRow } from '../types'
 import MetricCard from '../components/MetricCard'
 import BucketChart from '../components/BucketChart'
+import { metricDesc, metricLabel, METRIC_LABELS } from '../utils/metrics'
 
 const fmt = (v: number | null) => (v === null ? '—' : v.toFixed(4))
 
-// 指标 key → 中文标签(后端只认 key,展示文案放前端)
-const METRIC_LABELS: Record<string, string> = {
-  recall: '召回(机械)',
-  hit_at_k: '命中@k',
-  mrr: 'MRR',
-  context_precision: '上下文精度',
-  context_recall: '上下文召回',
-  faithfulness: '忠实度',
-  answer_relevance: '答案相关性',
-  answer_correctness: '答案正确性',
-  rejection: '拒答率',
-}
 
 // 复现上下文快照(Ch09):config 里系统快照字段的形态
 type Snapshot = {
@@ -45,15 +35,23 @@ export default function RunDetailView() {
   const { data: traces, reload: reloadTraces } = useRequest((s) => api.listTraces(id, s), [id])
   const [chartMetric, setChartMetric] = useState<string | null>(null)
 
-  // 回归门禁(Ch15):基线选择 + 门禁结果;默认基线 = 最近一个非本 run 的 done run
-  // 基线放 URL(?baseline=3):刷新不丢、链接可分享(Ch23)
+  // 回归门禁(Ch15):基线选择 + 门禁结果。
+  // 区分两个来源(Ch24):URL 里的 = 用户显式选的(可分享);autoBaseline = 自动挑的默认值。
+  // 只有显式选择才写 URL——否则光是打开一个 run 页,URL 就被塞上 ?baseline=,用户没选任何东西却看到地址变了。
   const [searchParams, setSearchParams] = useSearchParams()
-  const baselineId = searchParams.get('baseline') ? Number(searchParams.get('baseline')) : null
+  const urlBaseline = searchParams.get('baseline')
+  const [autoBaseline, setAutoBaseline] = useState<number | null>(null)
+  const baselineId = urlBaseline != null ? Number(urlBaseline) : autoBaseline
   const setBaselineId = (bid: number | null) => {
     const next = new URLSearchParams(searchParams)
     if (bid == null) next.delete('baseline')
     else next.set('baseline', String(bid))
     setSearchParams(next, { replace: true })
+  }
+  // 用户在 select 里动手:以后不再用自动默认,并把选择写进 URL
+  const chooseBaseline = (bid: number | null) => {
+    setAutoBaseline(null)
+    setBaselineId(bid)
   }
   const baselineInit = useRef(false)
   const { data: runList } = useRequest((s) => api.listRuns(s), [])
@@ -70,9 +68,12 @@ export default function RunDetailView() {
   useEffect(() => {
     if (baselineInit.current || !runList?.length) return
     baselineInit.current = true // 只自动选一次,之后尊重用户手动改
-    if (baselineId != null) return // URL 里已经带了基线(分享链接),不覆盖
-    const prev = runList.find((r) => r.status === 'done' && r.id !== id)
-    if (prev) setBaselineId(prev.id)
+    if (urlBaseline != null) return // URL 里已经指定(分享链接),不覆盖
+    // 默认基线 = 「紧邻的上一次」(id 比当前小里最大的那个):
+    // 语义是「这次比上次改得怎么样」。取最新那个是错的——看最老的 run 会拿最新的当基线。
+    // runList 本身按 id 倒序,find 第一个满足 id<当前 的就是紧邻的上一次;没有(自己是最老的)就不设。
+    const prev = runList.find((r) => r.status === 'done' && r.id < id)
+    if (prev) setAutoBaseline(prev.id) // 只设内存默认,不碰 URL
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runList, id])
 
@@ -89,20 +90,13 @@ export default function RunDetailView() {
   // 本 run 完成/失败时飘一条通知(详情页停留在页面上也能感知)
   useRunCompletionNotice(run ? [run] : [])
 
-  // 导出 CSV(Ch13):带鉴权头走 axios 拉文本,再 Blob 触发浏览器下载
-  const exportCsv = async () => {
-    try {
-      const csv = await api.exportRunCsv(id)
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `run_${id}.csv`
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : '导出失败')
-    }
+  // 导出 CSV(Ch25):交给浏览器原生下载——流式落盘、自带进度条和取消,全程不占 JS 内存。
+  // 之前是「axios 拉完整字符串 → new Blob → createObjectURL」,整份文件要在 JS 里存 2~3 份,
+  // 样本上万就会卡死/爆内存。后端也同步改成了 StreamingResponse,两端都不再缓冲整份文件。
+  const exportCsv = () => {
+    const a = document.createElement('a')
+    a.href = exportRunCsvUrl(id) // 响应带 Content-Disposition: attachment,不会跳走页面
+    a.click()
   }
 
   // 复现上下文:解析 config 快照;老 run 缺字段显示 —
@@ -157,25 +151,44 @@ export default function RunDetailView() {
           )}
         </h2>
         <Space>
-          <Button onClick={rerun}>一键复跑</Button>
-          <Button onClick={exportCsv}>导出 CSV</Button>
+          <Tooltip title="用本次 run 的快照配置(top_k / 检索方式 / 数据集)重新发起一次评测,用来复现这次的跑法">
+            <Button onClick={rerun}>一键复跑</Button>
+          </Tooltip>
+          <Tooltip
+            title={
+              <div>
+                导出这次评测的<b>逐条明细</b>为 CSV(每行一条样本):
+                <div style={{ marginTop: 4 }}>问题、回答、耗时(ms)、各指标分数</div>
+                <div style={{ marginTop: 4, color: '#ddd' }}>适合丢进 Excel / Python 做外部分析</div>
+              </div>
+            }
+          >
+            <Button onClick={exportCsv}>导出 CSV</Button>
+          </Tooltip>
         </Space>
       </div>
       <Card
         title="回归门禁"
         extra={
-          <Select
-            size="small"
-            style={{ width: 240 }}
-            value={baselineId ?? undefined}
-            placeholder="选择基线 run"
-            allowClear
-            onChange={(v) => setBaselineId(v ?? null)}
-            options={(runList ?? []).map((r) => ({
-              value: r.id,
-              label: `Run #${r.id} (${r.status})${r.dataset_name ? ' · ' + r.dataset_name : ''}`,
-            }))}
-          />
+          // 必须有标签(Ch24):只显示一个「Run #4」会让人以为它是「当前查看的 run」,
+          // 其实它是「拿谁当对比基准」——和当前页的 Run #5 是两回事。
+          <Space size={6}>
+            <span style={{ color: '#666' }}>对比基线</span>
+            <Tooltip title="以哪个 run 作为基准来算「回归」。默认取紧邻的上一次;留空则只做绝对阈值判定。">
+              <Select
+                size="small"
+                style={{ width: 220 }}
+                value={baselineId ?? undefined}
+                placeholder="不设基线"
+                allowClear
+                onChange={(v) => chooseBaseline(v ?? null)}
+                options={(runList ?? []).map((r) => ({
+                  value: r.id,
+                  label: `Run #${r.id} (${r.status})${r.dataset_name ? ' · ' + r.dataset_name : ''}`,
+                }))}
+              />
+            </Tooltip>
+          </Space>
         }
         style={{ marginBottom: 16 }}
       >
@@ -201,7 +214,7 @@ export default function RunDetailView() {
               pagination={false}
               dataSource={gate.checks}
               columns={[
-                { title: '指标', dataIndex: 'metric', render: (m: string) => METRIC_LABELS[m] ?? m },
+                { title: '指标', dataIndex: 'metric', render: (m: string) => <Tooltip title={metricDesc(m)}><span style={{ cursor: 'help', borderBottom: '1px dashed #d9d9d9' }}>{metricLabel(m)}</span></Tooltip> },
                 { title: '当前值', dataIndex: 'value', render: fmt },
                 { title: '阈值(≥)', dataIndex: 'threshold' },
                 { title: '基线值', dataIndex: 'baseline_value', render: (v: number | null) => (v == null ? '—' : v.toFixed(4)) },
@@ -271,7 +284,7 @@ export default function RunDetailView() {
       <Card style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
           {metricKeys.map((k) => (
-            <MetricCard key={k} label={METRIC_LABELS[k] ?? k} value={run.scores[k]} />
+            <MetricCard key={k} label={metricLabel(k)} value={run.scores[k]} desc={metricDesc(k)} />
           ))}
         </div>
       </Card>
@@ -283,7 +296,7 @@ export default function RunDetailView() {
             pagination={false}
             dataSource={Object.entries(calibration.metrics).map(([m, v]) => ({ metric: m, ...v }))}
             columns={[
-              { title: '指标', dataIndex: 'metric', render: (m: string) => METRIC_LABELS[m] ?? m },
+              { title: '指标', dataIndex: 'metric', render: (m: string) => <Tooltip title={metricDesc(m)}><span style={{ cursor: 'help', borderBottom: '1px dashed #d9d9d9' }}>{metricLabel(m)}</span></Tooltip> },
               {
                 title: 'Bias(偏松/偏严)',
                 dataIndex: 'bias',
@@ -347,7 +360,9 @@ export default function RunDetailView() {
                         style={{ minWidth: 220, flex: 1, border: '1px solid #eee', borderRadius: 6, padding: 8 }}
                       >
                         <div>
-                          <Tag color="blue">{METRIC_LABELS[s.name] ?? s.name}</Tag>
+                          <Tooltip title={metricDesc(s.name)}>
+                            <Tag color="blue">{metricLabel(s.name)}</Tag>
+                          </Tooltip>
                           <span style={{ fontWeight: 600 }}>{s.value ?? '—'}</span>
                           {s.variance != null && (
                             <span style={{ color: '#999', fontSize: 12, marginLeft: 6 }}>

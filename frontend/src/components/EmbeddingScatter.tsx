@@ -26,7 +26,7 @@ export default function EmbeddingScatter({ chunks, queries }: { chunks: Knowledg
             return (
               <div style={{ background: '#fff', border: '1px solid #eee', borderRadius: 6, padding: 8, fontSize: 12, maxWidth: 320 }}>
                 <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                  {isChunk ? `知识块 · ${p.category}` : '样本问题'}
+                  {isChunk ? `知识块 · ${p.category}` : `样本问题${p.bucket ? ` · ${p.bucket}` : ''}`}
                 </div>
                 <div style={{ color: '#444', whiteSpace: 'pre-wrap' }}>{p.text ?? p.input}</div>
               </div>

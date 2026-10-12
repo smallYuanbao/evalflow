@@ -1,6 +1,6 @@
 from backend.db import SessionLocal, init_db
 from backend.models import Dataset, DatasetItem, Generation, Run, Score, Trace
-from backend.stats import aggregate_run, run_export_csv, runs_trend
+from backend.stats import aggregate_run, run_export_csv_stream, runs_trend
 
 
 def test_aggregate_by_bucket():
@@ -193,8 +193,10 @@ def test_run_export_csv():
     s.commit()
     s.close()
 
-    lines = run_export_csv(rid).strip().splitlines()
-    assert lines[0].split(",") == ["trace_id", "input", "output", "latency_ms", "recall", "faithfulness"]
+    csv_text = "".join(run_export_csv_stream(rid))
+    lines = csv_text.strip().splitlines()
+    # 表头中文(Ch24):Excel 打开能直接看懂每列
+    assert lines[0].split(",") == ["样本ID", "问题", "回答", "耗时(ms)", "召回(机械)", "忠实度"]
     assert len(lines) == 2  # 表头 + 1 行
     row = lines[1].split(",")
     assert row[0] == str(t1_id)
@@ -203,4 +205,4 @@ def test_run_export_csv():
     assert row[4] == "1.0"
     assert row[5] == "0.9"
 
-    assert run_export_csv(999999) == ""  # 不存在的 run → 空串
+    # 不存在的 run:流式函数只产出表头(404 由端点负责,test_api 已覆盖)

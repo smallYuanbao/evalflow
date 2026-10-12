@@ -10,18 +10,8 @@ import {
 } from 'recharts'
 import { api } from '../api'
 import { useRequest } from '../hooks/useRequest'
+import { METRIC_LABELS } from '../utils/metrics'
 
-const METRIC_LABELS: Record<string, string> = {
-  recall: '召回(机械)',
-  hit_at_k: '命中@k',
-  mrr: 'MRR',
-  context_precision: '上下文精度',
-  context_recall: '上下文召回',
-  faithfulness: '忠实度',
-  answer_relevance: '答案相关性',
-  answer_correctness: '答案正确性',
-  rejection: '拒答率',
-}
 
 const fmt = (v: number | null | undefined) => (v == null ? '—' : v.toFixed(4))
 

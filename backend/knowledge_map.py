@@ -28,11 +28,15 @@ def _chunk_layout() -> dict:
     return _chunk_cache
 
 
-def _recent_unique_inputs(limit: int) -> list[str]:
-    """取最近的去重样本问题(有界)。多取 3 倍候选,去重后截到 limit。"""
+def _recent_unique_inputs(limit: int) -> list[dict]:
+    """取最近的去重样本问题(有界):返回 [{input, bucket}]。
+
+    多取 3 倍候选,按 input 去重后截到 limit。带上 bucket 是为了能在散点图上看出
+    「库外题是不是都聚在向量空间边缘」——这正是知识库地图的用法之一(Ch23)。
+    """
     s = SessionLocal()
     try:
-        rows = (s.query(DatasetItem.input)
+        rows = (s.query(DatasetItem.input, DatasetItem.bucket)
                 .order_by(DatasetItem.id.desc())
                 .limit(limit * 3)
                 .all())
@@ -40,11 +44,11 @@ def _recent_unique_inputs(limit: int) -> list[str]:
         s.close()
 
     seen: set[str] = set()
-    out: list[str] = []
-    for (text,) in rows:
+    out: list[dict] = []
+    for text, bucket in rows:
         if text and text not in seen:
             seen.add(text)
-            out.append(text)
+            out.append({"input": text, "bucket": bucket or "未分桶"})
             if len(out) >= limit:
                 break
     return out
@@ -61,8 +65,9 @@ def knowledge_map() -> dict:
 
     inputs = _recent_unique_inputs(MAX_QUERY_POINTS)
     if inputs:
-        pts = project(embed(inputs), layout["mean"], layout["basis"])
-        queries = [{"input": inputs[j], "x": round(pts[j][0], 4), "y": round(pts[j][1], 4)}
+        pts = project(embed([q["input"] for q in inputs]), layout["mean"], layout["basis"])
+        queries = [{"input": inputs[j]["input"], "bucket": inputs[j]["bucket"],
+                    "x": round(pts[j][0], 4), "y": round(pts[j][1], 4)}
                    for j in range(len(inputs))]
     else:
         queries = []

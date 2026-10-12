@@ -94,7 +94,8 @@ export default function DatasetsView() {
             onChange={(e) => setName(e.target.value)}
           />
         </div>
-        <div>
+        {/* showCount 的字数是 absolute bottom:-22px 挂在文本框下方的,不给它留位就会压到 footer 按钮 */}
+        <div style={{ marginBottom: 26 }}>
           <label htmlFor="ds-desc" style={{ display: 'block', marginBottom: 6, color: '#666' }}>
             描述
           </label>

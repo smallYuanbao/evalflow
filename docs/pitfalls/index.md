@@ -17,6 +17,7 @@
 - [Ch13 可观测性](ch13-observability.md) —— 路由顺序(静态 vs 动态) / DetachedInstanceError 复发 / CSV 要 BOM / setup_logging 幂等
 - [Ch14 交付硬化](ch14-delivery-hardening.md) —— e2e 端口隔离 / antd Select placeholder / 空态隐藏按钮 / vitest 误拾取 / nginx 启动期解析
 - [Ch21 接口性能](ch21-performance.md) —— 请求内全表扫描 + 无缓存致超时 / 函数内改全局忘写 global
+- [Ch25 数据规模与流式](ch25-scale-and-streaming.md) —— 两端各缓冲 2~3 份 / 绕开浏览器原生下载
 
 ## 按主题速查
 
@@ -34,6 +35,7 @@
 | 鉴权 / 限流 / 费用 | Ch12(中间件顺序 / 滑动窗口 / token 计量) |
 | 可观测性 / 路由 / 编码 | Ch13(路由顺序 / CSV BOM / 日志幂等) |
 | 性能 / 缓存 | Ch21(全表扫描 / 静态数据缓存 / 有界查询) |
+| 数据规模 / 流式 | Ch25(整份缓冲 / 绕开浏览器原生下载) |
 | Python 作用域 | Ch21(函数内改模块级变量要 global) |
 
 ## 几条反复出现的底层规律
@@ -45,3 +47,4 @@
 5. **环境/版本要显式**——依赖 pin 版本、Node 选对版本、onnxruntime 按架构 pin(Ch03/Ch04)。
 6. **测试/部署上下文要隔离**——e2e 别复用旧服务、两套测试框架划清边界、容器反代只在 compose 网络里成立(Ch14)。
 7. **不变的量算一次就够**——静态数据缓存住、可视化别喂全量、性能先量后猜(Ch21)。
+8. **规模不受控就别「攒齐再交付」**——导出/批量/大列表一律流式,平台给的原生能力别绕开(Ch25)。

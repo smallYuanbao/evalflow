@@ -2,7 +2,7 @@
 import axios, { AxiosError, type AxiosRequestConfig } from 'axios'
 import { getApiKey } from './key'
 
-const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'
+export const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'
 
 // 统一错误类型:带状态码,上层可按 status 分支
 export class ApiError extends Error {
@@ -58,4 +58,14 @@ export async function request<T>(path: string, config?: AxiosRequestConfig): Pro
   const resp = await http.request<T>({ url: path, ...config })
   if (resp.status === 204) return undefined as T
   return resp.data
+}
+
+/**
+ * 导出接口的直链(Ch25):给「浏览器原生下载」用——流式落盘、自带进度、不占 JS 内存。
+ * 导航请求带不上 Authorization 头,所以已设密钥时改用 ?token=(只有导出端点开这个口子)。
+ */
+export function exportRunCsvUrl(runId: number): string {
+  const key = getApiKey()
+  const qs = key ? `?token=${encodeURIComponent(key)}` : ''
+  return `${BASE}/runs/${runId}/export${qs}`
 }

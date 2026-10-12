@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func
 
@@ -14,7 +14,7 @@ from backend.logging_config import setup_logging
 from backend.models import Dataset, DatasetItem, Run, Score, Trace, _now
 from backend.ratelimit import run_limiter
 from backend.snapshot import build_snapshot, config_retrieval, config_top_k
-from backend.stats import aggregate_run, run_export_csv, runs_trend
+from backend.stats import aggregate_run, run_export_csv_stream, runs_trend
 from backend.gate import evaluate_gate
 from backend.calibration import calibration_report
 
@@ -46,6 +46,11 @@ async def auth_middleware(request: Request, call_next):
     if settings.app_api_key and request.url.path != "/health" and request.method != "OPTIONS":
         auth = request.headers.get("Authorization", "")
         token = auth[len("Bearer "):].strip() if auth.startswith("Bearer ") else ""
+        # 例外(Ch25):导出端点是给「浏览器原生下载」用的,导航请求带不上自定义头,
+        # 所以它额外接受 ?token=。只有这一个只读端点开这个口子;其余仍只认 Authorization 头。
+        # 代价:token 会落在访问日志/浏览器历史里——demo 单密钥可接受,生产应换成一次性下载令牌。
+        if not token and request.url.path.endswith("/export"):
+            token = request.query_params.get("token", "")
         if token != settings.app_api_key:
             return JSONResponse(status_code=401, content={"detail": "无效或缺失的 API Key"})
     return await call_next(request)
@@ -398,16 +403,30 @@ def get_run_calibration(run_id: int):
     return report
 
 
+def _with_bom(chunks):
+    """给流式 CSV 的首块加 UTF-8 BOM,让 Excel 正确识别编码、中文不乱码。"""
+    first = True
+    for c in chunks:
+        yield ("﻿" + c) if first else c
+        first = False
+
+
 @app.get("/runs/{run_id}/export")
 def export_run(run_id: int):
-    """导出某 run 的逐 trace 明细为 CSV(Ch13 供外部分析)。"""
-    csv_text = run_export_csv(run_id)
-    if not csv_text:
+    """导出某 run 的逐 trace 明细为 CSV(Ch13 供外部分析)。
+
+    流式返回(Ch25):边生成边发,内存不随样本数增长。配合前端的「浏览器原生下载」,
+    整条链路上没有哪一端需要把整份文件驻留在内存里。
+    """
+    s = SessionLocal()
+    has_rows = s.query(Trace.id).filter(Trace.run_id == run_id).first() is not None
+    s.close()
+    if not has_rows:
         raise HTTPException(status_code=404, detail="run 不存在或没有明细")
-    # BOM:让 Excel 正确识别 UTF-8,中文不乱码
-    return Response(
-        content="﻿" + csv_text,
+    return StreamingResponse(
+        _with_bom(run_export_csv_stream(run_id)),
         media_type="text/csv; charset=utf-8",
+        # 浏览器看到 attachment 就直接落盘,不做页面跳转(前端据此用 <a> 触发下载)
         headers={"Content-Disposition": f"attachment; filename=run_{run_id}.csv"},
     )
 
