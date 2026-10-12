@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import { Button, Card, Descriptions, Result, Select, Skeleton, Table, Tag, message } from 'antd'
 import { api } from '../api'
 import { useRequest } from '../hooks/useRequest'
-import type { GateCheck, TraceRow } from '../types'
+import type { BucketAttribution, GateCheck, TraceRow } from '../types'
 import MetricCard from '../components/MetricCard'
 import BucketChart from '../components/BucketChart'
 
@@ -49,6 +49,10 @@ export default function RunDetailView() {
     [id, baselineId],
   )
   const { data: calibration } = useRequest((s) => api.getRunCalibration(id, s), [id])
+  const { data: bucketAttr } = useRequest(
+    (s) => (baselineId != null ? api.getBucketAttribution(id, baselineId, s) : Promise.resolve(null)),
+    [id, baselineId],
+  )
 
   useEffect(() => {
     if (baselineInit.current || !runList?.length) return
@@ -174,6 +178,28 @@ export default function RunDetailView() {
           </>
         ) : null}
       </Card>
+      {bucketAttr && bucketAttr.buckets.length > 0 && (
+        <Card title={`分桶归因(相对基线 Run #${bucketAttr.baseline_run_id})`} style={{ marginBottom: 16 }}>
+          <Table
+            rowKey="bucket"
+            size="small"
+            pagination={false}
+            dataSource={bucketAttr.buckets}
+            columns={[
+              { title: '分桶', dataIndex: 'bucket' },
+              { title: '样本数', dataIndex: 'count' },
+              ...metricKeys.map((m) => ({
+                title: METRIC_LABELS[m] ?? m,
+                key: m,
+                render: (_: unknown, rec: BucketAttribution) => {
+                  const d = rec.deltas[m]
+                  return d == null ? '—' : <Tag color={d >= 0 ? 'green' : 'red'}>{(d >= 0 ? '+' : '') + d.toFixed(4)}</Tag>
+                },
+              })),
+            ]}
+          />
+        </Card>
+      )}
       <Card title="费用统计" style={{ marginBottom: 16 }}>
         <Descriptions column={3} size="small">
           <Descriptions.Item label="输入 Token">{run.input_tokens ?? 0}</Descriptions.Item>

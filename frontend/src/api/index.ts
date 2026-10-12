@@ -1,6 +1,6 @@
 // 类型化接口方法(不再手写 header,统一走 client)
 import { request } from './client'
-import type { CalibrationResult, Dataset, DatasetItem, DatasetPage, GateResult, KnowledgeMap, Run, RunDetail, RunDiffResult, RunTrend, TraceRow } from '../types'
+import type { BucketAttributionResult, CalibrationResult, Dataset, DatasetItem, DatasetPage, GateResult, KnowledgeMap, ModelComparison, Run, RunDetail, RunDiffResult, RunTrend, TraceRow } from '../types'
 
 export const api = {
   // 读接口都收 signal(useRequest 用来打断上次请求);写接口一次性触发,不收
@@ -35,6 +35,9 @@ export const api = {
   exportRunCsv: (id: number) => request<string>(`/runs/${id}/export`),
   getRunDiff: (a: number, b: number, signal?: AbortSignal) => request<RunDiffResult>(`/runs/${a}/diff/${b}`, { signal }),
   getRunCalibration: (id: number, signal?: AbortSignal) => request<CalibrationResult>(`/runs/${id}/calibration`, { signal }),
+  getBucketAttribution: (id: number, baselineId: number, signal?: AbortSignal) =>
+    request<BucketAttributionResult>(`/runs/${id}/bucket-attribution?baseline_run_id=${baselineId}`, { signal }),
+  getModelComparison: (signal?: AbortSignal) => request<{ models: ModelComparison[] }>('/runs/model-comparison', { signal }),
   listTraces: (id: number, signal?: AbortSignal) => request<TraceRow[]>(`/runs/${id}/traces`, { signal }),
   getKnowledgeMap: (signal?: AbortSignal) => request<KnowledgeMap>('/knowledge/map', { signal }),
 }

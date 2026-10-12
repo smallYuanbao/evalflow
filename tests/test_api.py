@@ -240,3 +240,81 @@ def test_run_diff_matches_by_item_and_delta():
     assert abs(p["deltas"]["faithfulness"] - 0.15) < 1e-6  # 0.85 - 0.7
 
     assert client.get(f"/runs/{ra_id}/diff/999999").status_code == 404
+
+
+def test_bucket_attribution_deltas():
+    # Ch19:分桶归因 = 和基线比,每个 bucket 的逐指标 delta
+    from backend.db import SessionLocal, init_db
+    from backend.models import Dataset, DatasetItem, Run, Score, Trace
+
+    init_db()
+    s = SessionLocal()
+    ds = Dataset(name="归因", description="")
+    s.add(ds)
+    s.flush()
+    i1 = DatasetItem(dataset_id=ds.id, input="q1", expected_output="a", bucket="护理")
+    i2 = DatasetItem(dataset_id=ds.id, input="q2", expected_output="b", bucket="睡眠")
+    s.add_all([i1, i2])
+    s.flush()
+
+    def _run(ff: float, f2: float):
+        r = Run(dataset_id=ds.id, status="done", config="{}")
+        s.add(r)
+        s.flush()
+        t1 = Trace(run_id=r.id, dataset_item_id=i1.id, input="q1", output="o", retrieved_context="c")
+        t2 = Trace(run_id=r.id, dataset_item_id=i2.id, input="q2", output="o", retrieved_context="c")
+        s.add_all([t1, t2])
+        s.flush()
+        s.add_all([Score(trace_id=t1.id, name="faithfulness", value=ff),
+                   Score(trace_id=t2.id, name="faithfulness", value=f2)])
+        return r.id
+
+    ra = _run(0.7, 0.8)  # 护理 0.7 / 睡眠 0.8
+    rb = _run(0.8, 0.75)  # 护理 0.8 / 睡眠 0.75
+    s.commit()
+    s.close()
+
+    data = client.get(f"/runs/{ra}/bucket-attribution", params={"baseline_run_id": rb}).json()
+    by_bucket = {b["bucket"]: b["deltas"]["faithfulness"] for b in data["buckets"]}
+    assert abs(by_bucket["护理"] - (-0.1)) < 1e-6  # 0.7 - 0.8
+    assert abs(by_bucket["睡眠"] - 0.05) < 1e-6     # 0.8 - 0.75
+
+    assert client.get(f"/runs/{ra}/bucket-attribution", params={"baseline_run_id": 999999}).status_code == 404
+
+
+def test_model_comparison():
+    # Ch19:按 chat_model 分组 done run;用唯一模型名避免共享库里的历史 run 干扰
+    from backend.db import SessionLocal, init_db
+    from backend.models import Dataset, DatasetItem, Run, Score, Trace
+
+    init_db()
+    s = SessionLocal()
+    ds = Dataset(name="模型", description="")
+    s.add(ds)
+    s.flush()
+    i1 = DatasetItem(dataset_id=ds.id, input="q1", expected_output="a", bucket="护理")
+    s.add(i1)
+    s.flush()
+
+    def _run(model: str, score: float):
+        r = Run(dataset_id=ds.id, status="done", config=json.dumps({"chat_model": model}))
+        s.add(r)
+        s.flush()
+        t = Trace(run_id=r.id, dataset_item_id=i1.id, input="q1", output="o", retrieved_context="c")
+        s.add(t)
+        s.flush()
+        s.add(Score(trace_id=t.id, name="faithfulness", value=score))
+
+    _run("model-test-a", 0.8)
+    _run("model-test-a", 0.9)
+    _run("model-test-b", 0.95)
+    s.commit()
+    s.close()
+
+    data = client.get("/runs/model-comparison").json()
+    by_model = {m["model"]: m for m in data["models"]}
+    assert by_model["model-test-a"]["run_count"] == 2
+    assert abs(by_model["model-test-a"]["avg_scores"]["faithfulness"] - 0.85) < 1e-6
+    assert by_model["model-test-b"]["run_count"] == 1
+    assert abs(by_model["model-test-b"]["avg_scores"]["faithfulness"] - 0.95) < 1e-6
+    assert by_model["model-test-a"]["avg_cost"] == 0.0  # 无 generation 计量,成本为 0

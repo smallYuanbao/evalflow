@@ -12,17 +12,20 @@ const RunDetailView = lazy(() => import('./views/RunDetailView'))
 const CompareView = lazy(() => import('./views/CompareView'))
 const KnowledgeMapView = lazy(() => import('./views/KnowledgeMapView'))
 const TrendView = lazy(() => import('./views/TrendView'))
+const ModelCompareView = lazy(() => import('./views/ModelCompareView'))
 
 export default function App() {
   const location = useLocation()
   // 根据当前 URL 选中 tab,让浏览器前进/后退也能正确切换菜单(问题3)
   const selectedKey = location.pathname.startsWith('/trend')
     ? 'trend'
-    : location.pathname.startsWith('/runs') || location.pathname.startsWith('/compare')
-      ? 'runs'
-      : location.pathname.startsWith('/knowledge')
-        ? 'knowledge'
-        : 'datasets'
+    : location.pathname.startsWith('/models')
+      ? 'models'
+      : location.pathname.startsWith('/runs') || location.pathname.startsWith('/compare')
+        ? 'runs'
+        : location.pathname.startsWith('/knowledge')
+          ? 'knowledge'
+          : 'datasets'
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Layout.Header style={{ display: 'flex', alignItems: 'center' }}>
@@ -35,6 +38,9 @@ export default function App() {
           </Menu.Item>
           <Menu.Item key="trend">
             <Link to="/trend">趋势</Link>
+          </Menu.Item>
+          <Menu.Item key="models">
+            <Link to="/models">模型对比</Link>
           </Menu.Item>
           <Menu.Item key="knowledge">
             <Link to="/knowledge">知识库</Link>
@@ -53,6 +59,7 @@ export default function App() {
               <Route path="/runs/:runId" element={<RunDetailView />} />
               <Route path="/compare" element={<CompareView />} />
               <Route path="/trend" element={<TrendView />} />
+              <Route path="/models" element={<ModelCompareView />} />
               <Route path="/knowledge" element={<KnowledgeMapView />} />
             </Routes>
           </Suspense>

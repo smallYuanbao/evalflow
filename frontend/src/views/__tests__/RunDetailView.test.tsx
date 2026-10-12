@@ -12,6 +12,7 @@ vi.mock('../../api', () => ({
     listRuns: vi.fn().mockResolvedValue([]), // 门禁卡基线选择器
     getRunGate: vi.fn().mockResolvedValue({ passed: true, checks: [], run_id: 1, baseline_run_id: null }),
     getRunCalibration: vi.fn().mockResolvedValue({ run_id: 1, metrics: {} }),
+    getBucketAttribution: vi.fn().mockResolvedValue(null),
   },
 }))
 
@@ -231,4 +232,32 @@ test('展示 Judge 校准卡(Ch18)', async () => {
   await waitFor(() => expect(screen.getByText(/Judge 校准/)).toBeInTheDocument())
   expect(screen.getByText('Bias(偏松/偏严)')).toBeInTheDocument()
   expect(screen.getByText(/-0\.1000/)).toBeInTheDocument()
+})
+
+test('展示分桶归因(Ch19)', async () => {
+  vi.mocked(api.getRun).mockResolvedValue({
+    id: 9,
+    dataset_id: 1,
+    status: 'done',
+    config: '{}',
+    item_count: 2,
+    scores: { faithfulness: 0.8 },
+    by_bucket: { 护理: { count: 2, faithfulness: 0.8 } },
+  })
+  vi.mocked(api.listRuns).mockResolvedValue([{ id: 1, dataset_id: 1, status: 'done', config: '{}' }])
+  vi.mocked(api.getBucketAttribution).mockResolvedValue({
+    run_id: 9,
+    baseline_run_id: 1,
+    buckets: [{ bucket: '护理', count: 2, deltas: { faithfulness: 0.1 } }],
+  })
+  render(
+    <MemoryRouter initialEntries={['/runs/9']}>
+      <Routes>
+        <Route path="/runs/:runId" element={<RunDetailView />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  await waitFor(() => expect(screen.getByText(/分桶归因/)).toBeInTheDocument())
+  expect(screen.getAllByText('护理').length).toBeGreaterThan(0) // 分桶聚合表 + 归因表都有
+  expect(screen.getByText(/\+0\.1000/)).toBeInTheDocument() // 归因 delta 绿标
 })

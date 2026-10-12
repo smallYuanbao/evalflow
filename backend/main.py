@@ -228,6 +228,46 @@ def get_runs_trend(limit: int = 50):
     return runs_trend(limit)
 
 
+@app.get("/runs/model-comparison")
+def model_comparison():
+    """模型性价比(Ch19):按 chat_model 分组 done run,返回每模型 run 数/平均分/平均成本。
+
+    同样必须注册在 /runs/{run_id} 之前(静态段会被动态段抢)。
+    """
+    s = SessionLocal()
+    runs = s.query(Run).filter(Run.status == "done").all()
+    s.close()
+
+    by_model: dict[str, dict] = {}
+    for r in runs:
+        try:
+            model = json.loads(r.config or "{}").get("chat_model") or "unknown"
+        except (TypeError, json.JSONDecodeError):
+            model = "unknown"
+        d = by_model.setdefault(model, {"runs": [], "costs": [], "items": [], "scores": {}})
+        agg = aggregate_run(r.id)
+        d["runs"].append(r.id)
+        d["costs"].append(agg["cost"])
+        d["items"].append(agg["item_count"])
+        for m, v in agg["scores"].items():
+            if v is not None:
+                d["scores"].setdefault(m, []).append(v)
+
+    models = []
+    for model, d in by_model.items():
+        n = len(d["runs"])
+        avg_cost = round(sum(d["costs"]) / n, 6) if n else 0.0
+        avg_items = sum(d["items"]) / n if n else 0
+        models.append({
+            "model": model,
+            "run_count": n,
+            "avg_cost": avg_cost,
+            "avg_cost_per_item": round(avg_cost / avg_items, 8) if avg_items else 0.0,
+            "avg_scores": {m: round(sum(v) / len(v), 4) for m, v in d["scores"].items()},
+        })
+    return {"models": models}
+
+
 @app.get("/runs/{run_id}")
 def get_run(run_id: int):
     return aggregate_run(run_id)
@@ -255,6 +295,32 @@ def get_run_gate(run_id: int, baseline_run_id: int | None = None):
         "run_id": run_id,
         "baseline_run_id": baseline_run_id,
     }
+
+
+@app.get("/runs/{run_id}/bucket-attribution")
+def bucket_attribution(run_id: int, baseline_run_id: int):
+    """分桶归因(Ch19):和基线比,每个 bucket 的逐指标 delta,定位「哪个桶拖后腿」。"""
+    s = SessionLocal()
+    run_ok = s.get(Run, run_id) is not None
+    base_ok = s.get(Run, baseline_run_id) is not None
+    s.close()
+    if not run_ok or not base_ok:
+        raise HTTPException(status_code=404, detail="run 不存在")
+
+    agg = aggregate_run(run_id)
+    base = aggregate_run(baseline_run_id)
+    metrics = list(agg["scores"].keys())  # 指标按注册表顺序
+    a, b = agg["by_bucket"], base["by_bucket"]
+    buckets = []
+    for bucket in sorted(set(a) | set(b)):
+        deltas = {}
+        for m in metrics:
+            av = a.get(bucket, {}).get(m)
+            bv = b.get(bucket, {}).get(m)
+            if av is not None and bv is not None:
+                deltas[m] = round(av - bv, 4)
+        buckets.append({"bucket": bucket, "count": a.get(bucket, {}).get("count"), "deltas": deltas})
+    return {"run_id": run_id, "baseline_run_id": baseline_run_id, "buckets": buckets}
 
 
 @app.get("/runs/{run_a_id}/diff/{run_b_id}")

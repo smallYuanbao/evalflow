@@ -93,6 +93,28 @@ export interface CalibrationResult {
   metrics: Record<string, CalibrationMetric>
 }
 
+// 分桶归因(Ch19):每个 bucket 相对基线的逐指标 delta
+export interface BucketAttribution {
+  bucket: string
+  count: number | null
+  deltas: Record<string, number>
+}
+
+export interface BucketAttributionResult {
+  run_id: number
+  baseline_run_id: number
+  buckets: BucketAttribution[]
+}
+
+// 模型性价比对比(Ch19):按模型分组的分数 × 成本
+export interface ModelComparison {
+  model: string
+  run_count: number
+  avg_cost: number
+  avg_cost_per_item: number
+  avg_scores: Record<string, number>
+}
+
 // 历史指标趋势(Ch13):单个 run 的 per-metric 均值,用于折线图
 export interface RunTrend {
   id: number
