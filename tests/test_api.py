@@ -162,3 +162,81 @@ def test_run_export_route():
     assert "trace_id" in r.text
 
     assert client.get("/runs/999999/export").status_code == 404  # 无明细 → 404
+
+
+def test_list_traces_includes_comment():
+    # Ch18:Judge reason 存在 Score.comment,list_traces 要露出给前端
+    from backend.db import SessionLocal, init_db
+    from backend.models import Dataset, DatasetItem, Run, Score, Trace
+
+    init_db()
+    s = SessionLocal()
+    ds = Dataset(name="明细", description="")
+    s.add(ds)
+    s.flush()
+    i1 = DatasetItem(dataset_id=ds.id, input="q", expected_output="a", bucket="护理")
+    s.add(i1)
+    s.flush()
+    run = Run(dataset_id=ds.id, status="done", config="{}")
+    s.add(run)
+    s.flush()
+    t1 = Trace(run_id=run.id, dataset_item_id=i1.id, input="q", output="o",
+               retrieved_context="证据", retrieval_hits='[{"text":"e","score":0.9,"rank":1}]')
+    s.add(t1)
+    s.flush()
+    s.add(Score(trace_id=t1.id, name="faithfulness", value=0.8, comment="回答忠于证据"))
+    s.commit()
+    rid = run.id
+    s.close()
+
+    traces = client.get(f"/runs/{rid}/traces").json()
+    assert len(traces) == 1
+    sc = next(x for x in traces[0]["scores"] if x["name"] == "faithfulness")
+    assert sc["comment"] == "回答忠于证据"
+
+
+def test_run_diff_matches_by_item_and_delta():
+    # Ch18:按 dataset_item_id 匹配两条 run 的 trace,算逐指标 delta;跨数据集标记;404
+    from backend.db import SessionLocal, init_db
+    from backend.models import Dataset, DatasetItem, Run, Score, Trace
+
+    init_db()
+    s = SessionLocal()
+    ds = Dataset(name="diff", description="")
+    s.add(ds)
+    s.flush()
+    i1 = DatasetItem(dataset_id=ds.id, input="q1", expected_output="a", bucket="护理")
+    s.add(i1)
+    s.flush()
+
+    ra = Run(dataset_id=ds.id, status="done", config="{}")
+    s.add(ra)
+    s.flush()
+    ta = Trace(run_id=ra.id, dataset_item_id=i1.id, input="q1", output="o1",
+               retrieved_context="证据A", retrieval_hits='[{"text":"e","score":0.9,"rank":1}]')
+    s.add(ta)
+    s.flush()
+    s.add(Score(trace_id=ta.id, name="faithfulness", value=0.7))
+
+    rb = Run(dataset_id=ds.id, status="done", config="{}")
+    s.add(rb)
+    s.flush()
+    tb = Trace(run_id=rb.id, dataset_item_id=i1.id, input="q1", output="o1",
+               retrieved_context="证据B", retrieval_hits='[{"text":"e2","score":0.95,"rank":1}]')
+    s.add(tb)
+    s.flush()
+    s.add(Score(trace_id=tb.id, name="faithfulness", value=0.85))
+    s.commit()
+    ra_id, rb_id = ra.id, rb.id
+    s.close()
+
+    data = client.get(f"/runs/{ra_id}/diff/{rb_id}").json()
+    assert data["different_datasets"] is False
+    assert len(data["pairs"]) == 1
+    p = data["pairs"][0]
+    assert p["input"] == "q1"
+    assert p["a"]["retrieved_context"] == "证据A"
+    assert p["b"]["retrieved_context"] == "证据B"
+    assert abs(p["deltas"]["faithfulness"] - 0.15) < 1e-6  # 0.85 - 0.7
+
+    assert client.get(f"/runs/{ra_id}/diff/999999").status_code == 404

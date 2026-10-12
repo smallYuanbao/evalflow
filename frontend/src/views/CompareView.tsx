@@ -1,9 +1,9 @@
 import { useSearchParams } from 'react-router-dom'
-import { Button, Empty, Result, Skeleton, Table } from 'antd'
+import { Alert, Button, Card, Empty, Result, Skeleton, Table, Tag } from 'antd'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { api } from '../api'
 import { useRequest } from '../hooks/useRequest'
-import type { RunDetail } from '../types'
+import type { RunDetail, RunDiffSide } from '../types'
 
 // 指标 key → 中文标签(与 RunDetailView 一致)
 const METRIC_LABELS: Record<string, string> = {
@@ -29,6 +29,27 @@ function topKOf(run: RunDetail): string {
   }
 }
 
+// 逐条 Diff 的一侧(Ch18):证据 + 分数
+function DiffSide({ title, side }: { title: string; side: RunDiffSide | null }) {
+  if (!side)
+    return (
+      <div style={{ flex: 1 }}>
+        <Tag>{title}</Tag>
+        <div style={{ color: '#999', fontSize: 12 }}>—</div>
+      </div>
+    )
+  const scoreText = Object.entries(side.scores)
+    .map(([k, v]) => `${METRIC_LABELS[k] ?? k}=${v == null ? '—' : v.toFixed(4)}`)
+    .join(' ')
+  return (
+    <div style={{ flex: 1 }}>
+      <Tag color="blue">{title}</Tag>
+      <div style={{ fontSize: 12, color: '#666' }}>{side.retrieved_context || '—'}</div>
+      <div style={{ fontSize: 12, marginTop: 4 }}>{scoreText || '—'}</div>
+    </div>
+  )
+}
+
 export default function CompareView() {
   const [params] = useSearchParams()
   const idsStr = params.get('ids') ?? ''
@@ -37,6 +58,11 @@ export default function CompareView() {
   // 复用 GET /runs/{id} 并发拉取,不新增批量接口(run 数量少,并发拉够快)
   const { data: runs, loading, error, reload } = useRequest(
     (s) => Promise.all(ids.map((id) => api.getRun(id, s))),
+    [idsStr],
+  )
+  // 逐条 diff(Ch18):只有正好 2 个 run 才有意义
+  const { data: diff } = useRequest(
+    (s) => (ids.length === 2 ? api.getRunDiff(ids[0], ids[1], s) : Promise.resolve(null)),
     [idsStr],
   )
 
@@ -100,6 +126,46 @@ export default function CompareView() {
         </ResponsiveContainer>
       ) : (
         <Empty description="暂无对比数据" />
+      )}
+
+      {ids.length === 2 ? (
+        <Card title="逐条 Diff" style={{ marginTop: 16 }}>
+          {diff?.different_datasets && (
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginBottom: 12 }}
+              message="两次 run 不在同一评测集,逐条对比可能无意义"
+            />
+          )}
+          {diff?.pairs.length ? (
+            diff.pairs.map((p) => (
+              <Card key={p.item_id} size="small" style={{ marginBottom: 8 }}>
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>{p.input ?? '(无输入)'}</div>
+                <div style={{ display: 'flex', gap: 16 }}>
+                  <DiffSide title={`Run #${diff.run_a_id}`} side={p.a} />
+                  <DiffSide title={`Run #${diff.run_b_id}`} side={p.b} />
+                </div>
+                {Object.keys(p.deltas).length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    {Object.entries(p.deltas).map(([m, d]) => (
+                      <Tag key={m} color={d >= 0 ? 'green' : 'red'}>
+                        {METRIC_LABELS[m] ?? m} {d >= 0 ? '+' : ''}
+                        {d.toFixed(4)}
+                      </Tag>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            ))
+          ) : (
+            <Empty description="暂无逐条 diff 数据" />
+          )}
+        </Card>
+      ) : (
+        <Card title="逐条 Diff" style={{ marginTop: 16 }}>
+          <Empty description="选 2 个 run 才能逐条对比" />
+        </Card>
       )}
     </div>
   )

@@ -16,6 +16,7 @@ export interface DatasetItem {
   input: string
   expected_output: string
   bucket: string
+  gold_scores?: Record<string, number> | null // Ch18 校准:人工金标准 {metric: score}
 }
 
 export interface Run {
@@ -52,7 +53,44 @@ export interface TraceRow {
   retrieved_context: string
   retrieval_hits?: { text: string; score: number; rank: number }[]
   latency_ms: number
-  scores: { name: string; value: number | null }[]
+  scores: { name: string; value: number | null; comment?: string }[]  // comment = Judge reason(Ch18)
+}
+
+// 逐条 Diff(Ch18):两条 run 按 dataset_item_id 匹配后的并排对比
+export interface RunDiffSide {
+  trace_id: number
+  output: string
+  retrieved_context: string
+  retrieval_hits?: { text: string; score: number; rank: number }[]
+  scores: Record<string, number | null>
+}
+
+export interface RunDiffPair {
+  item_id: number
+  input: string | null
+  a: RunDiffSide | null
+  b: RunDiffSide | null
+  deltas: Record<string, number>
+}
+
+export interface RunDiffResult {
+  run_a_id: number
+  run_b_id: number
+  different_datasets: boolean
+  pairs: RunDiffPair[]
+}
+
+// Judge 校准(Ch18):每 metric 的 judge vs gold 一致性
+export interface CalibrationMetric {
+  bias: number | null // judge 均值 − gold 均值(系统性偏松/偏严)
+  mae: number | null // 平均绝对误差
+  corr: number | null // Pearson 相关系数
+  n: number // 校准样本数
+}
+
+export interface CalibrationResult {
+  run_id: number
+  metrics: Record<string, CalibrationMetric>
 }
 
 // 历史指标趋势(Ch13):单个 run 的 per-metric 均值,用于折线图

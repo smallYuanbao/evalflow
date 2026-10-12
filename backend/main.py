@@ -16,6 +16,7 @@ from backend.ratelimit import run_limiter
 from backend.snapshot import build_snapshot, config_retrieval, config_top_k
 from backend.stats import aggregate_run, run_export_csv, runs_trend
 from backend.gate import evaluate_gate
+from backend.calibration import calibration_report
 
 
 @asynccontextmanager
@@ -71,6 +72,10 @@ class ItemIn(BaseModel):
     bucket: str = ""
 
 
+class GoldIn(BaseModel):
+    gold_scores: dict[str, float]  # metric -> 金标准分数(0~1),Ch18 校准
+
+
 class RunIn(BaseModel):
     dataset_id: int
     config: str = "{}"
@@ -107,13 +112,37 @@ def add_item(dataset_id: int, body: ItemIn):
     return {"id": it.id, "input": it.input, "bucket": it.bucket}
 
 
+def _parse_gold(raw: str | None) -> dict | None:
+    """gold_scores 列(JSON 字符串)解析成 dict;空/坏数据返回 None。"""
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+
 @app.get("/datasets/{dataset_id}/items")
 def list_items(dataset_id: int):
     s = SessionLocal()
     items = s.query(DatasetItem).filter(DatasetItem.dataset_id == dataset_id).all()
     s.close()
     return [{"id": it.id, "input": it.input, "expected_output": it.expected_output,
-             "bucket": it.bucket} for it in items]
+             "bucket": it.bucket, "gold_scores": _parse_gold(it.gold_scores)} for it in items]
+
+
+@app.put("/datasets/{dataset_id}/items/{item_id}/gold")
+def set_item_gold(dataset_id: int, item_id: int, body: GoldIn):
+    """标金标准(Ch18 校准):给某条样本写人工分数 {"faithfulness": 0.9, ...}。"""
+    s = SessionLocal()
+    item = s.get(DatasetItem, item_id)
+    if item is None or item.dataset_id != dataset_id:
+        s.close()
+        raise HTTPException(status_code=404, detail="样本不存在")
+    item.gold_scores = json.dumps(body.gold_scores, ensure_ascii=False)
+    s.commit()
+    s.close()
+    return {"id": item_id, "gold_scores": body.gold_scores}
 
 
 @app.get("/datasets")
@@ -228,6 +257,80 @@ def get_run_gate(run_id: int, baseline_run_id: int | None = None):
     }
 
 
+@app.get("/runs/{run_a_id}/diff/{run_b_id}")
+def diff_runs(run_a_id: int, run_b_id: int):
+    """逐条 diff(Ch18):按 dataset_item_id 匹配两条 run 的 trace,返回并排 + 逐指标 delta。
+
+    用 dataset_item_id 而非 input:input 文本不唯一(重复样本会错配),item_id 才是同一条样本的身份。
+    两 run 不同数据集时返回 different_datasets 标记,前端提示「逐条对比无意义」,不静默错配。
+    """
+    s = SessionLocal()
+    run_a = s.get(Run, run_a_id)
+    run_b = s.get(Run, run_b_id)
+    if run_a is None or run_b is None:
+        s.close()
+        raise HTTPException(status_code=404, detail="run 不存在")
+    different = run_a.dataset_id != run_b.dataset_id
+
+    def _traces(run_id: int) -> dict[int, dict]:
+        traces = s.query(Trace).filter(Trace.run_id == run_id).all()
+        tids = [t.id for t in traces]
+        scores_by_trace: dict[int, dict] = {}
+        if tids:
+            for sc in s.query(Score).filter(Score.trace_id.in_(tids)):
+                scores_by_trace.setdefault(sc.trace_id, {})[sc.name] = sc.value
+        out = {}
+        for tr in traces:
+            out[tr.dataset_item_id] = {
+                "trace_id": tr.id,
+                "output": tr.output,
+                "retrieved_context": tr.retrieved_context,
+                "retrieval_hits": json.loads(tr.retrieval_hits or "[]"),
+                "scores": scores_by_trace.get(tr.id, {}),
+            }
+        return out
+
+    ta = _traces(run_a_id)
+    tb = _traces(run_b_id)
+    item_ids = set(ta) | set(tb)
+    inputs = dict(s.query(DatasetItem.id, DatasetItem.input)
+                  .filter(DatasetItem.id.in_(item_ids))) if item_ids else {}
+    s.close()
+
+    pairs = []
+    for iid in sorted(item_ids):
+        a, b = ta.get(iid), tb.get(iid)
+        deltas = {}
+        if a and b:
+            for m in set(a["scores"]) | set(b["scores"]):
+                av, bv = a["scores"].get(m), b["scores"].get(m)
+                if av is not None and bv is not None:
+                    deltas[m] = round(bv - av, 4)
+        pairs.append({
+            "item_id": iid,
+            "input": inputs.get(iid),
+            "a": a,
+            "b": b,
+            "deltas": deltas,
+        })
+
+    return {
+        "run_a_id": run_a_id,
+        "run_b_id": run_b_id,
+        "different_datasets": different,
+        "pairs": pairs,
+    }
+
+
+@app.get("/runs/{run_id}/calibration")
+def get_run_calibration(run_id: int):
+    """校准报告(Ch18):比对 run 的 judge 分 vs 样本金标准,算 bias/MAE/Pearson/n。"""
+    report = calibration_report(run_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="run 不存在")
+    return report
+
+
 @app.get("/runs/{run_id}/export")
 def export_run(run_id: int):
     """导出某 run 的逐 trace 明细为 CSV(Ch13 供外部分析)。"""
@@ -247,7 +350,7 @@ def list_traces(run_id: int):
     s = SessionLocal()
     out = []
     for tr in s.query(Trace).filter(Trace.run_id == run_id):
-        scs = [{"name": sc.name, "value": sc.value}
+        scs = [{"name": sc.name, "value": sc.value, "comment": sc.comment}
                for sc in s.query(Score).filter(Score.trace_id == tr.id)]
         out.append({"trace_id": tr.id, "input": tr.input, "output": tr.output,
                     "retrieved_context": tr.retrieved_context,

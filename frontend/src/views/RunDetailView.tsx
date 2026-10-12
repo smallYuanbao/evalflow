@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import { Button, Card, Descriptions, Result, Select, Skeleton, Table, Tag, message } from 'antd'
 import { api } from '../api'
 import { useRequest } from '../hooks/useRequest'
-import type { GateCheck } from '../types'
+import type { GateCheck, TraceRow } from '../types'
 import MetricCard from '../components/MetricCard'
 import BucketChart from '../components/BucketChart'
 
@@ -48,6 +48,7 @@ export default function RunDetailView() {
     (s) => api.getRunGate(id, baselineId ?? undefined, s),
     [id, baselineId],
   )
+  const { data: calibration } = useRequest((s) => api.getRunCalibration(id, s), [id])
 
   useEffect(() => {
     if (baselineInit.current || !runList?.length) return
@@ -204,6 +205,27 @@ export default function RunDetailView() {
           ))}
         </div>
       </Card>
+      {calibration && Object.keys(calibration.metrics).length > 0 && (
+        <Card title="Judge 校准(judge vs 金标准)" style={{ marginBottom: 16 }}>
+          <Table
+            rowKey="metric"
+            size="small"
+            pagination={false}
+            dataSource={Object.entries(calibration.metrics).map(([m, v]) => ({ metric: m, ...v }))}
+            columns={[
+              { title: '指标', dataIndex: 'metric', render: (m: string) => METRIC_LABELS[m] ?? m },
+              {
+                title: 'Bias(偏松/偏严)',
+                dataIndex: 'bias',
+                render: (v: number | null) => (v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(4)),
+              },
+              { title: 'MAE', dataIndex: 'mae', render: (v: number | null) => (v == null ? '—' : v.toFixed(4)) },
+              { title: 'Pearson', dataIndex: 'corr', render: (v: number | null) => (v == null ? '—' : v.toFixed(4)) },
+              { title: '样本数', dataIndex: 'n' },
+            ]}
+          />
+        </Card>
+      )}
       <Card
         title="分桶聚合"
         extra={
@@ -238,6 +260,36 @@ export default function RunDetailView() {
         <Table
           rowKey="trace_id"
           dataSource={traces ?? []}
+          expandable={{
+            // Ch18:展开行看完整链路——证据上下文 + 各 Judge 的 score/reason(可解释性)
+            expandedRowRender: (rec: TraceRow) => (
+              <div style={{ padding: '8px 16px', background: '#fafafa' }}>
+                <div style={{ marginBottom: 8 }}>
+                  <span style={{ fontWeight: 600 }}>证据上下文：</span>
+                  <span style={{ color: '#444' }}>{rec.retrieved_context || '—'}</span>
+                </div>
+                <div>
+                  <span style={{ fontWeight: 600 }}>Judge 打分：</span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 4 }}>
+                    {rec.scores.map((s) => (
+                      <div
+                        key={s.name}
+                        style={{ minWidth: 220, flex: 1, border: '1px solid #eee', borderRadius: 6, padding: 8 }}
+                      >
+                        <div>
+                          <Tag color="blue">{METRIC_LABELS[s.name] ?? s.name}</Tag>
+                          <span style={{ fontWeight: 600 }}>{s.value ?? '—'}</span>
+                        </div>
+                        {s.comment ? (
+                          <div style={{ color: '#666', fontSize: 12, marginTop: 4 }}>{s.comment}</div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ),
+          }}
           columns={[
             { title: '问题', dataIndex: 'input' },
             { title: '回答', dataIndex: 'output' },
@@ -257,7 +309,7 @@ export default function RunDetailView() {
             {
               title: '分数',
               dataIndex: 'scores',
-              render: (scs: { name: string; value: number | null }[]) =>
+              render: (scs: { name: string; value: number | null; comment?: string }[]) =>
                 scs.map((s) => `${METRIC_LABELS[s.name] ?? s.name}=${s.value ?? '—'}`).join(' '),
             },
           ]}

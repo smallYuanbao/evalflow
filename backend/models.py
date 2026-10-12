@@ -30,6 +30,7 @@ class DatasetItem(Base):
     input = Column(Text)
     expected_output = Column(Text)      # ground truth 要点(召回用)
     bucket = Column(String)             # 分桶标签
+    gold_scores = Column(Text, default=None)  # Ch18:人工金标准 JSON,如 {"faithfulness": 0.9}(校准用)
     dataset = relationship("Dataset", back_populates="items")
 
 

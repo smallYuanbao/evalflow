@@ -1,6 +1,6 @@
 // 类型化接口方法(不再手写 header,统一走 client)
 import { request } from './client'
-import type { Dataset, DatasetItem, DatasetPage, GateResult, KnowledgeMap, Run, RunDetail, RunTrend, TraceRow } from '../types'
+import type { CalibrationResult, Dataset, DatasetItem, DatasetPage, GateResult, KnowledgeMap, Run, RunDetail, RunDiffResult, RunTrend, TraceRow } from '../types'
 
 export const api = {
   // 读接口都收 signal(useRequest 用来打断上次请求);写接口一次性触发,不收
@@ -18,6 +18,11 @@ export const api = {
   getDataset: (id: number, signal?: AbortSignal) => request<Dataset>(`/datasets/${id}`, { signal }),
   addItem: (id: number, body: { input: string; expected_output: string; bucket: string }) =>
     request<DatasetItem>(`/datasets/${id}/items`, { method: 'POST', data: body }),
+  setItemGold: (datasetId: number, itemId: number, goldScores: Record<string, number>) =>
+    request<{ id: number; gold_scores: Record<string, number> }>(`/datasets/${datasetId}/items/${itemId}/gold`, {
+      method: 'PUT',
+      data: { gold_scores: goldScores },
+    }),
   createRun: (dataset_id: number, config?: { top_k?: number; retrieval?: 'dense' | 'hybrid' }) =>
     request<Run>('/runs', { method: 'POST', data: { dataset_id, config: JSON.stringify(config ?? {}) } }),
   listRuns: (signal?: AbortSignal) => request<Run[]>('/runs', { signal }),
@@ -28,6 +33,8 @@ export const api = {
     return request<GateResult>(`/runs/${id}/gate${qs}`, { signal })
   },
   exportRunCsv: (id: number) => request<string>(`/runs/${id}/export`),
+  getRunDiff: (a: number, b: number, signal?: AbortSignal) => request<RunDiffResult>(`/runs/${a}/diff/${b}`, { signal }),
+  getRunCalibration: (id: number, signal?: AbortSignal) => request<CalibrationResult>(`/runs/${id}/calibration`, { signal }),
   listTraces: (id: number, signal?: AbortSignal) => request<TraceRow[]>(`/runs/${id}/traces`, { signal }),
   getKnowledgeMap: (signal?: AbortSignal) => request<KnowledgeMap>('/knowledge/map', { signal }),
 }
