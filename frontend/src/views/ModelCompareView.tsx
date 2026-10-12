@@ -1,7 +1,6 @@
 import { Button, Card, Empty, Result, Skeleton, Table } from 'antd'
 import {
   CartesianGrid,
-  LabelList,
   ResponsiveContainer,
   Scatter,
   ScatterChart,
@@ -43,6 +42,7 @@ export default function ModelCompareView() {
     name: m.model,
     x: m.avg_cost_per_item,
     y: m.avg_scores[yMetric] ?? 0,
+    runs: m.run_count,
   }))
 
   return (
@@ -74,12 +74,32 @@ export default function ModelCompareView() {
             <ResponsiveContainer width="100%" height={320}>
               <ScatterChart margin={{ top: 24, right: 24, bottom: 24, left: 24 }}>
                 <CartesianGrid />
-                <XAxis type="number" dataKey="x" name="单条成本" />
+                <XAxis
+                  type="number"
+                  dataKey="x"
+                  name="单条成本"
+                  tickFormatter={(v: number) => v.toFixed(5)}
+                />
                 <YAxis type="number" dataKey="y" domain={[0, 1]} name={METRIC_LABELS[yMetric] ?? yMetric} />
-                <Tooltip cursor={{ strokeDasharray: '3 3' }} formatter={(v: number, n: string) => [v?.toFixed(6), n]} />
-                <Scatter data={scatter} fill="#3b82f6">
-                  <LabelList dataKey="name" position="top" />
-                </Scatter>
+                {/* 不给每个点常显标签(点多会糊成一团),名字放 tooltip 悬停才看 */}
+                <Tooltip
+                  cursor={{ strokeDasharray: '3 3' }}
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null
+                    const m = payload[0].payload as { name: string; x: number; y: number; runs: number }
+                    return (
+                      <div style={{ background: '#fff', border: '1px solid #eee', borderRadius: 6, padding: 8, fontSize: 12 }}>
+                        <div style={{ fontWeight: 600 }}>{m.name}</div>
+                        <div>Run 数: {m.runs}</div>
+                        <div>单条成本: {m.x.toFixed(6)} 元</div>
+                        <div>
+                          {METRIC_LABELS[yMetric] ?? yMetric}: {m.y.toFixed(4)}
+                        </div>
+                      </div>
+                    )
+                  }}
+                />
+                <Scatter data={scatter} fill="#3b82f6" />
               </ScatterChart>
             </ResponsiveContainer>
           </Card>

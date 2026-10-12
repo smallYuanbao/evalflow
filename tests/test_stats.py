@@ -135,6 +135,7 @@ def test_runs_trend_aggregates():
         Score(trace_id=t2.id, name="recall", value=None),  # NULL 不参与均值
     ])
     r1_id, r2_id = r1.id, r2.id  # commit 后 ORM 对象 expire,提前取普通字段
+    ds_id = ds.id
     s.commit()
     s.close()
 
@@ -143,6 +144,28 @@ def test_runs_trend_aggregates():
     assert by_id[r1_id]["scores"]["faithfulness"] == 0.9  # (0.8 + 1.0) / 2
     assert by_id[r2_id]["scores"]["faithfulness"] == 0.6
     assert by_id[r1_id]["dataset_name"] == "t"
+
+    # Ch21:按 dataset_id 过滤 —— 只返回该评测集的 run
+    filtered = runs_trend(dataset_id=ds_id)
+    assert {r["id"] for r in filtered} == {r1_id, r2_id}
+
+
+def test_runs_trend_dataset_filter():
+    # Ch21:dataset_id 过滤只保留该评测集的 run;不存在的 id → 空
+    init_db()
+    s = SessionLocal()
+    ds = Dataset(name="trend-filter", description="")
+    s.add(ds)
+    s.flush()
+    r = Run(dataset_id=ds.id, status="done", config="{}")
+    s.add(r)
+    s.commit()
+    did, rid = ds.id, r.id
+    s.close()
+
+    ids = {x["id"] for x in runs_trend(dataset_id=did)}
+    assert ids == {rid}
+    assert runs_trend(dataset_id=999999) == []
 
 
 def test_run_export_csv():

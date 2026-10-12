@@ -73,13 +73,17 @@ def aggregate_run(run_id: int) -> dict:
     }
 
 
-def runs_trend(limit: int = 50) -> list[dict]:
+def runs_trend(limit: int = 50, dataset_id: int | None = None) -> list[dict]:
     """历史指标趋势(Ch13):批量聚合最近 N 个 run 的 per-metric 均值。
 
     一次查询所有 trace/score 再按 run 分组,避免前端逐 run 拉(那会 N+1)。
+    dataset_id(Ch21):只看某个评测集的趋势,不传=全部。
     """
     s = SessionLocal()
-    runs = s.query(Run).order_by(Run.id.desc()).limit(limit).all()
+    q = s.query(Run).order_by(Run.id.desc())
+    if dataset_id is not None:
+        q = q.filter(Run.dataset_id == dataset_id)
+    runs = q.limit(limit).all()
     runs = list(reversed(runs))  # 时间正序:折线图从左到右
     if not runs:
         s.close()

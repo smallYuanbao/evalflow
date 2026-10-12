@@ -27,7 +27,8 @@ export const api = {
     request<Run>('/runs', { method: 'POST', data: { dataset_id, config: JSON.stringify(config ?? {}) } }),
   listRuns: (signal?: AbortSignal) => request<Run[]>('/runs', { signal }),
   getRun: (id: number, signal?: AbortSignal) => request<RunDetail>(`/runs/${id}`, { signal }),
-  listRunsTrend: (signal?: AbortSignal) => request<RunTrend[]>('/runs/trend', { signal }),
+  listRunsTrend: (dataset_id?: number, signal?: AbortSignal) =>
+    request<RunTrend[]>(`/runs/trend${dataset_id != null ? `?dataset_id=${dataset_id}` : ''}`, { signal }),
   getRunGate: (id: number, baselineId?: number, signal?: AbortSignal) => {
     const qs = baselineId != null ? `?baseline_run_id=${baselineId}` : ''
     return request<GateResult>(`/runs/${id}/gate${qs}`, { signal })

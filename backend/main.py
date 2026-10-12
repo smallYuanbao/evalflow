@@ -220,12 +220,13 @@ def list_runs():
 
 
 @app.get("/runs/trend")
-def get_runs_trend(limit: int = 50):
+def get_runs_trend(limit: int = 50, dataset_id: int | None = None):
     """历史指标趋势:批量返回最近 N 个 run 的 per-metric 均值(Ch13)。
 
+    dataset_id 可选:只看某个评测集的趋势(Ch21)。
     注意:必须注册在 /runs/{run_id} 之前,否则 trend 会被当成 run_id 解析成 422。
     """
-    return runs_trend(limit)
+    return runs_trend(limit, dataset_id)
 
 
 @app.get("/runs/model-comparison")
