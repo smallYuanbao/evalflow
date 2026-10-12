@@ -79,9 +79,35 @@ export default function DatasetsView() {
         onOk={create}
         okButtonProps={{ disabled: !name.trim() }}
         onCancel={() => setOpen(false)}
+        destroyOnHidden
       >
-        <Input placeholder="名称" value={name} onChange={(e) => setName(e.target.value)} style={{ marginBottom: 12 }} />
-        <Input.TextArea placeholder="描述" value={desc} onChange={(e) => setDesc(e.target.value)} />
+        <div style={{ marginBottom: 16 }}>
+          <label htmlFor="ds-name" style={{ display: 'block', marginBottom: 6, color: '#666' }}>
+            名称 <span style={{ color: '#ff4d4f' }}>*</span>
+          </label>
+          <Input
+            id="ds-name"
+            placeholder="如:育儿-常见病"
+            value={name}
+            maxLength={50}
+            showCount
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+        <div>
+          <label htmlFor="ds-desc" style={{ display: 'block', marginBottom: 6, color: '#666' }}>
+            描述
+          </label>
+          <Input.TextArea
+            id="ds-desc"
+            placeholder="选填,一句话说明这个评测集测什么"
+            value={desc}
+            maxLength={200}
+            showCount
+            autoSize={{ minRows: 2, maxRows: 4 }}
+            onChange={(e) => setDesc(e.target.value)}
+          />
+        </div>
       </Modal>
     </Space>
   )

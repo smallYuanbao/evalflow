@@ -21,6 +21,14 @@ def test_config_top_k_parse_and_fallback():
     assert snapshot.config_top_k("") == 2
 
 
+def test_config_top_k_clamps_out_of_range():
+    # Ch23:前端 min/max 只在失焦时生效,且 API 可绕过前端 → 服务端必须钳制
+    assert snapshot.config_top_k('{"top_k": 99999}') == snapshot.MAX_TOP_K
+    assert snapshot.config_top_k('{"top_k": -5}') == 1
+    assert snapshot.config_top_k('{"top_k": 0}') == 1
+    assert snapshot.config_top_k('{"top_k": 3}') == 3  # 范围内不动
+
+
 def test_config_retrieval_parse_and_fallback():
     assert snapshot.config_retrieval("{}") == "hybrid"                 # 缺省回退 hybrid
     assert snapshot.config_retrieval('{"retrieval": "dense"}') == "dense"

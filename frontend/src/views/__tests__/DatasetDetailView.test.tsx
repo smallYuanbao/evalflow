@@ -19,7 +19,7 @@ test('展示评测集名称与加样本表单', async () => {
     </MemoryRouter>,
   )
   await waitFor(() => expect(screen.getByText('育儿')).toBeInTheDocument())
-  expect(screen.getByPlaceholderText('问题')).toBeInTheDocument()
+  expect(screen.getByLabelText(/问题/)).toBeInTheDocument() // 问题输入框(Ch23 改多行 + 真 label)
 })
 
 test('问题为空时加样本按钮禁用', async () => {

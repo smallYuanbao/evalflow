@@ -7,12 +7,20 @@ from backend.knowledge import KNOWLEDGE, KNOWLEDGE_VERSION
 from backend.prompts import JUDGE_PROMPTS_VERSION, PIPELINE_PROMPT_VERSION
 
 
+MAX_TOP_K = 20  # top_k 上限:前端 max=10,这里留余量;再大也没意义(知识库才 23 条)
+
+
 def config_top_k(config_str: str) -> int:
-    """从 config 快照取 top_k,缺省/解析失败回退默认 2(兼容老 run 的空 config)。"""
+    """从 config 快照取 top_k,缺省/解析失败回退默认 2(兼容老 run 的空 config)。
+
+    越界值钳制到 [1, MAX_TOP_K]:前端 InputNumber 的 min/max 只在失焦时生效,
+    且 API 可绕过前端,所以校验必须落在服务端(Ch23)。
+    """
     try:
-        return int(json.loads(config_str or "{}").get("top_k", 2))
+        v = int(json.loads(config_str or "{}").get("top_k", 2))
     except (TypeError, ValueError, json.JSONDecodeError):
         return 2
+    return min(max(v, 1), MAX_TOP_K)
 
 
 def config_retrieval(config_str: str) -> str:

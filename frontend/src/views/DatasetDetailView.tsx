@@ -55,28 +55,41 @@ export default function DatasetDetailView() {
     <Space direction="vertical" style={{ width: '100%' }} size="large">
       <Button onClick={() => nav('/datasets')}>← 返回评测集</Button>
       <h2>{ds?.name ?? `评测集 #${id}`}</h2>
-      <Space>
-        <Input
-          placeholder="问题"
+      {/* 两行布局(Ch23):问题用多行输入框——单行输入长问题会水平滚动,看不到前面写了什么。
+          换行才解决可见性(限长不解决);期望要点/分桶内容短,保持单行避免整块过高。 */}
+      <div>
+        <label htmlFor="item-input" style={{ display: 'block', marginBottom: 6, color: '#666' }}>
+          问题 <span style={{ color: '#ff4d4f' }}>*</span>
+        </label>
+        <Input.TextArea
+          id="item-input"
+          placeholder="如:宝宝发烧38度怎么办"
           value={item.input}
+          maxLength={200}
+          showCount
+          autoSize={{ minRows: 2, maxRows: 5 }}
           onChange={(e) => setItem({ ...item, input: e.target.value })}
+          style={{ marginBottom: 12 }}
         />
-        <Input
-          placeholder="期望要点(用/分隔)"
-          value={item.expected_output}
-          onChange={(e) => setItem({ ...item, expected_output: e.target.value })}
-        />
-        <Select
-          placeholder="分桶"
-          value={item.bucket || undefined}
-          style={{ width: 120 }}
-          options={['护理', '喂养', '睡眠', '库外'].map((b) => ({ value: b, label: b }))}
-          onChange={(v) => setItem({ ...item, bucket: v })}
-        />
-        <Button type="primary" disabled={!item.input.trim()} onClick={add}>
-          加样本
-        </Button>
-      </Space>
+        <Space wrap>
+          <Input
+            placeholder="期望要点(用/分隔)"
+            value={item.expected_output}
+            style={{ width: 280 }}
+            onChange={(e) => setItem({ ...item, expected_output: e.target.value })}
+          />
+          <Select
+            placeholder="分桶"
+            value={item.bucket || undefined}
+            style={{ width: 120 }}
+            options={['护理', '喂养', '睡眠', '库外'].map((b) => ({ value: b, label: b }))}
+            onChange={(v) => setItem({ ...item, bucket: v })}
+          />
+          <Button type="primary" disabled={!item.input.trim()} onClick={add}>
+            加样本
+          </Button>
+        </Space>
+      </div>
       {!items?.length ? (
         <Empty description="还没有样本" />
       ) : (

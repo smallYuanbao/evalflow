@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Button, Card, Descriptions, Result, Select, Skeleton, Space, Table, Tag, message } from 'antd'
 import { api } from '../api'
 import { useRequest } from '../hooks/useRequest'
@@ -46,7 +46,15 @@ export default function RunDetailView() {
   const [chartMetric, setChartMetric] = useState<string | null>(null)
 
   // 回归门禁(Ch15):基线选择 + 门禁结果;默认基线 = 最近一个非本 run 的 done run
-  const [baselineId, setBaselineId] = useState<number | null>(null)
+  // 基线放 URL(?baseline=3):刷新不丢、链接可分享(Ch23)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const baselineId = searchParams.get('baseline') ? Number(searchParams.get('baseline')) : null
+  const setBaselineId = (bid: number | null) => {
+    const next = new URLSearchParams(searchParams)
+    if (bid == null) next.delete('baseline')
+    else next.set('baseline', String(bid))
+    setSearchParams(next, { replace: true })
+  }
   const baselineInit = useRef(false)
   const { data: runList } = useRequest((s) => api.listRuns(s), [])
   const { data: gate, loading: gateLoading } = useRequest(
@@ -61,9 +69,11 @@ export default function RunDetailView() {
 
   useEffect(() => {
     if (baselineInit.current || !runList?.length) return
+    baselineInit.current = true // 只自动选一次,之后尊重用户手动改
+    if (baselineId != null) return // URL 里已经带了基线(分享链接),不覆盖
     const prev = runList.find((r) => r.status === 'done' && r.id !== id)
     if (prev) setBaselineId(prev.id)
-    baselineInit.current = true // 只自动选一次,之后尊重用户手动改
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runList, id])
 
   // 运行中轮询(与列表页一致):进度/状态/逐条明细实时刷新,run 变 done/failed 自动停
@@ -169,7 +179,11 @@ export default function RunDetailView() {
         }
         style={{ marginBottom: 16 }}
       >
-        {gateLoading && !gate ? (
+        {run.status === 'running' ? (
+          // 评测没跑完时证据不全,判「不通过」是错的(实测空 scores → 全「未评」→ FAIL)。
+          // 结论只在有完整数据时才有意义(Ch23)。
+          <div style={{ color: '#888' }}>评测中…完成后给出门禁结论</div>
+        ) : gateLoading && !gate ? (
           <Skeleton active paragraph={{ rows: 3 }} />
         ) : gate ? (
           <>

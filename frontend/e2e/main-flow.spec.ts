@@ -8,15 +8,15 @@ test('主流程:造评测集 → 发评测 → 看结果', async ({ page }) => {
   // 1. 新建评测集
   await page.goto('/datasets')
   await page.getByRole('button', { name: '新建评测集' }).click()
-  await page.getByPlaceholder('名称').fill(dsName)
-  await page.getByPlaceholder('描述').fill('端到端测试')
-  await page.getByRole('button', { name: 'OK' }).click()
+  await page.getByLabel(/名称/).fill(dsName)
+  await page.getByLabel('描述').fill('端到端测试')
+  await page.getByRole('button', { name: /确\s*定/ }).click() // Ch23 配了中文 locale
   await expect(page.locator('tr', { hasText: dsName })).toBeVisible()
 
   // 2. 进详情加一个样本
   await page.locator('tr', { hasText: dsName }).getByRole('button', { name: '查看' }).click()
   await expect(page).toHaveURL(/\/datasets\/\d+/)
-  await page.getByPlaceholder('问题').fill('宝宝发烧怎么办?')
+  await page.getByLabel(/问题/).fill('宝宝发烧怎么办?')
   await page.getByPlaceholder('期望要点(用/分隔)').fill('物理降温/就医')
   await page.getByRole('button', { name: '加样本' }).click()
   await expect(page.getByText('已添加')).toBeVisible()

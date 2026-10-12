@@ -212,6 +212,52 @@ test('逐条明细展开行能看到 Judge reason(Ch18)', async () => {
   expect(screen.getByText(/方差 0\.001000/)).toBeInTheDocument() // Ch20 judge 采样方差
 })
 
+test('运行中的 run 不展示门禁结论(Ch23)', async () => {
+  vi.mocked(api.getRun).mockResolvedValue({
+    id: 11,
+    dataset_id: 1,
+    status: 'running',
+    config: '{}',
+    item_count: 7,
+    progress: 2,
+    scores: {},
+    by_bucket: {},
+  })
+  render(
+    <MemoryRouter initialEntries={['/runs/11']}>
+      <Routes>
+        <Route path="/runs/:runId" element={<RunDetailView />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  // 评测没跑完,证据不全,不该判 FAIL
+  await waitFor(() => expect(screen.getByText(/评测中/)).toBeInTheDocument())
+  expect(screen.queryByText(/FAIL 不通过/)).not.toBeInTheDocument()
+})
+
+test('基线从 URL 读取(Ch23 ?baseline=)', async () => {
+  vi.mocked(api.getRun).mockResolvedValue({
+    id: 12,
+    dataset_id: 1,
+    status: 'done',
+    config: '{}',
+    item_count: 1,
+    scores: { faithfulness: 0.9 },
+    by_bucket: { 护理: { count: 1, faithfulness: 0.9 } },
+  })
+  const getRunGate = vi.mocked(api.getRunGate)
+  getRunGate.mockClear()
+  render(
+    <MemoryRouter initialEntries={['/runs/12?baseline=7']}>
+      <Routes>
+        <Route path="/runs/:runId" element={<RunDetailView />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  // 请求门禁时带上 URL 里的基线,而不是自动挑最近一个
+  await waitFor(() => expect(getRunGate).toHaveBeenCalledWith(12, 7, expect.anything()))
+})
+
 test('展示 Judge 校准卡(Ch18)', async () => {
   vi.mocked(api.getRun).mockResolvedValue({
     id: 8,
