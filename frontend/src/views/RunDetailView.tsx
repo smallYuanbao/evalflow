@@ -37,7 +37,7 @@ export default function RunDetailView() {
   const { runId } = useParams()
   const id = Number(runId)
   const { data: run, loading, error, reload } = useRequest((s) => api.getRun(id, s), [id])
-  const { data: traces } = useRequest((s) => api.listTraces(id, s), [id])
+  const { data: traces, reload: reloadTraces } = useRequest((s) => api.listTraces(id, s), [id])
   const [chartMetric, setChartMetric] = useState<string | null>(null)
 
   // 回归门禁(Ch15):基线选择 + 门禁结果;默认基线 = 最近一个非本 run 的 done run
@@ -55,6 +55,16 @@ export default function RunDetailView() {
     if (prev) setBaselineId(prev.id)
     baselineInit.current = true // 只自动选一次,之后尊重用户手动改
   }, [runList, id])
+
+  // 运行中轮询(与列表页一致):进度/状态/逐条明细实时刷新,run 变 done/failed 自动停
+  useEffect(() => {
+    if (run?.status !== 'running') return
+    const t = setInterval(() => {
+      reload()
+      reloadTraces()
+    }, 1500)
+    return () => clearInterval(t)
+  }, [run?.status, reload, reloadTraces])
 
   // 导出 CSV(Ch13):带鉴权头走 axios 拉文本,再 Blob 触发浏览器下载
   const exportCsv = async () => {

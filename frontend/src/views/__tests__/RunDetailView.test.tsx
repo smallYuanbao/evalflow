@@ -145,3 +145,27 @@ test('展示回归门禁(Ch15):FAIL 徽章 + 逐指标判定', async () => {
   await waitFor(() => expect(screen.getByText('FAIL 不通过')).toBeInTheDocument())
   expect(screen.getByText('低于阈值')).toBeInTheDocument()
 })
+
+test('运行中的 run 详情页会启动 1.5s 轮询', async () => {
+  const spy = vi.spyOn(globalThis, 'setInterval')
+  vi.mocked(api.getRun).mockResolvedValue({
+    id: 6,
+    dataset_id: 1,
+    status: 'running',
+    config: '{}',
+    item_count: 10,
+    progress: 3,
+    scores: { recall: 0.75 },
+    by_bucket: { 护理: { count: 1, recall: 0.75 } },
+  })
+  render(
+    <MemoryRouter initialEntries={['/runs/6']}>
+      <Routes>
+        <Route path="/runs/:runId" element={<RunDetailView />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  await waitFor(() => expect(screen.getByText(/进度/)).toBeInTheDocument())
+  expect(spy).toHaveBeenCalledWith(expect.any(Function), 1500) // running → 启动 1.5s 轮询
+  spy.mockRestore()
+})
