@@ -428,26 +428,10 @@ def list_traces(run_id: int):
 
 @app.get("/knowledge/map")
 def knowledge_map():
-    """知识库可视化:知识块拟合 PCA 基底,样本问题投影到同一 2D 坐标系。"""
-    from backend.embedding import embed
-    from backend.knowledge import KNOWLEDGE
-    from backend.pca import fit_pca, project
+    """知识库可视化:知识块拟合 PCA 基底,样本问题投影到同一 2D 坐标系(Ch04)。
 
-    s = SessionLocal()
-    inputs = [it.input for it in s.query(DatasetItem).all()]
-    s.close()
+    实现见 backend/knowledge_map.py:知识库部分缓存、样本部分有界(Ch21 性能修复)。
+    """
+    from backend.knowledge_map import knowledge_map as _build
 
-    chunk_texts = [k["text"] for k in KNOWLEDGE]
-    chunk_vecs = embed(chunk_texts)
-    mean, basis = fit_pca(chunk_vecs)
-    chunk_pts = project(chunk_vecs, mean, basis)
-    query_pts = project(embed(inputs), mean, basis) if inputs else []
-
-    chunks = [{"id": KNOWLEDGE[i]["id"], "text": KNOWLEDGE[i]["text"],
-               "category": KNOWLEDGE[i]["category"],
-               "x": round(chunk_pts[i][0], 4), "y": round(chunk_pts[i][1], 4)}
-              for i in range(len(chunk_texts))]
-    queries = [{"input": inputs[j],
-                "x": round(query_pts[j][0], 4), "y": round(query_pts[j][1], 4)}
-               for j in range(len(inputs))]
-    return {"chunks": chunks, "queries": queries}
+    return _build()
