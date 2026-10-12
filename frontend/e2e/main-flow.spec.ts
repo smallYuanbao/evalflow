@@ -23,8 +23,9 @@ test('主流程:造评测集 → 发评测 → 看结果', async ({ page }) => {
 
   // 3. 发起评测(同步执行,发完即 done)
   await page.goto('/runs')
-  // antd Select 的 placeholder 是 span 不是 input 属性,getByPlaceholder 匹配不到,改点 combobox
-  await page.getByRole('combobox').click()
+  // antd Select 的 placeholder 是 span 不是 input 属性,getByPlaceholder 匹配不到,改点 combobox;
+  // 工具栏现有「选评测集」「检索方式」两个 Select,first() 取第一个(选评测集)
+  await page.getByRole('combobox').first().click()
   await page.locator('.ant-select-item-option', { hasText: dsName }).click()
   await page.getByRole('button', { name: '发起评测' }).click()
   await expect(page.locator('tr', { hasText: dsName }).first()).toBeVisible()

@@ -25,8 +25,8 @@ def _mock_judges(monkeypatch):
 def _seed_run(monkeypatch):
     monkeypatch.setattr(
         run_service, "run_pipeline",
-        lambda q, top_k=2: {"output": f"答:{q}", "retrieved_context": "物理降温 就医 用药",
-                            "hits": [{"text": "物理降温", "score": 0.9}]},
+        lambda q, top_k=2, retrieval="hybrid": {"output": f"答:{q}", "retrieved_context": "物理降温 就医 用药",
+                                                 "hits": [{"text": "物理降温", "score": 0.9}]},
     )
     _mock_judges(monkeypatch)
     init_db()
@@ -80,7 +80,7 @@ def test_generation_records_cost(monkeypatch):
 def test_execute_run_failed(monkeypatch):
     rid = _seed_run(monkeypatch)
 
-    def _boom(q, top_k=2):
+    def _boom(q, top_k=2, retrieval="hybrid"):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(run_service, "run_pipeline", _boom)
@@ -94,7 +94,7 @@ def test_execute_run_absent_bucket(monkeypatch):
     # 库外题只评 rejection;普通题评 recall + 5 个 judge
     monkeypatch.setattr(
         run_service, "run_pipeline",
-        lambda q, top_k=2: {"output": "不清楚，没有相关证据。", "retrieved_context": "(无证据)", "hits": []},
+        lambda q, top_k=2, retrieval="hybrid": {"output": "不清楚，没有相关证据。", "retrieved_context": "(无证据)", "hits": []},
     )
     _mock_judges(monkeypatch)
     init_db()
@@ -127,11 +127,12 @@ def test_execute_run_absent_bucket(monkeypatch):
 
 
 def test_execute_run_passes_top_k_from_config(monkeypatch):
-    # config 里的 top_k 要真正流到 run_pipeline(不同 top_k 检索命中数不同)
+    # config 里的 top_k / retrieval 要真正流到 run_pipeline(不同配置检索行为不同)
     seen = {}
 
-    def _capture(q, top_k=2):
+    def _capture(q, top_k=2, retrieval="hybrid"):
         seen["top_k"] = top_k
+        seen["retrieval"] = retrieval
         return {"output": "答", "retrieved_context": "c", "hits": []}
 
     monkeypatch.setattr(run_service, "run_pipeline", _capture)
@@ -150,3 +151,4 @@ def test_execute_run_passes_top_k_from_config(monkeypatch):
 
     run_service.execute_run(rid)
     assert seen["top_k"] == 5
+    assert seen["retrieval"] == "hybrid"  # config 没写 retrieval → 默认 hybrid

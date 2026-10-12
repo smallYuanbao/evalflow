@@ -21,6 +21,13 @@ def test_config_top_k_parse_and_fallback():
     assert snapshot.config_top_k("") == 2
 
 
+def test_config_retrieval_parse_and_fallback():
+    assert snapshot.config_retrieval("{}") == "hybrid"                 # 缺省回退 hybrid
+    assert snapshot.config_retrieval('{"retrieval": "dense"}') == "dense"
+    assert snapshot.config_retrieval('{"retrieval": "bogus"}') == "hybrid"  # 非法值回退
+    assert snapshot.config_retrieval("not json") == "hybrid"           # 解析失败回退
+
+
 def test_build_snapshot_fields_and_dataset_hash():
     init_db()
     s = SessionLocal()
@@ -34,6 +41,8 @@ def test_build_snapshot_fields_and_dataset_hash():
 
     snap = snapshot.build_snapshot(did, top_k=3)
     assert snap["top_k"] == 3
+    assert snap["retrieval"] == "hybrid"  # 默认 hybrid(Ch16)
+    assert snapshot.build_snapshot(did, top_k=3, retrieval="dense")["retrieval"] == "dense"
     assert snap["knowledge_version"] == snapshot.KNOWLEDGE_VERSION
     assert snap["prompt_version"] == snapshot.PROMPTS_VERSION
     assert snap["item_count"] == 1

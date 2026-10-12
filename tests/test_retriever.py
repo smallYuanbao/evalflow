@@ -20,7 +20,7 @@ def _fake_embed(texts):
 def test_retrieve_returns_topk_with_scores(fresh_client, monkeypatch):
     monkeypatch.setattr(retriever, "embed", _fake_embed)
     retriever.ingest()
-    hits = retriever.retrieve("宝宝发烧", top_k=2)
+    hits = retriever.retrieve_dense("宝宝发烧", top_k=2)
     assert len(hits) == 2
     assert all("text" in h and "score" in h for h in hits)
     assert "发烧" in hits[0]["text"]             # 相似度最高的应是"发烧"类
@@ -29,6 +29,6 @@ def test_retrieve_returns_topk_with_scores(fresh_client, monkeypatch):
 
 def test_retrieve_lazy_ingests_when_empty(fresh_client, monkeypatch):
     monkeypatch.setattr(retriever, "embed", _fake_embed)
-    hits = retriever.retrieve("宝宝发烧", top_k=1)  # 空库自动灌库
+    hits = retriever.retrieve_dense("宝宝发烧", top_k=1)  # 空库自动灌库
     assert len(hits) == 1
     assert "发烧" in hits[0]["text"]

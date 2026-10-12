@@ -6,7 +6,7 @@
 """
 
 
-def mock_run_pipeline(input_text: str, top_k: int = 2) -> dict:
+def mock_run_pipeline(input_text: str, top_k: int = 2, retrieval: str = "hybrid") -> dict:
     """替换 backend.pipeline.run_pipeline:返回固定的检索证据 + 回答。"""
     return {
         "output": "物理降温并观察体温变化,持续高热需就医。",

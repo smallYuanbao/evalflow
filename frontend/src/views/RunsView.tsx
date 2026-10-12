@@ -11,12 +11,15 @@ const STATUS: Record<string, { color: string; text: string }> = {
   failed: { color: 'red', text: '失败' },
 }
 
-// 配置快照 → 一行可读标签(只有 top_k 值得回看时才有值)
+// 配置快照 → 一行可读标签(top_k + 检索方式,Ch16)
 function configLabel(config?: string): string {
   if (!config) return '—'
   try {
     const cfg = JSON.parse(config)
-    return cfg.top_k != null ? `top_k=${cfg.top_k}` : '—'
+    const parts: string[] = []
+    if (cfg.top_k != null) parts.push(`top_k=${cfg.top_k}`)
+    if (cfg.retrieval) parts.push(cfg.retrieval === 'hybrid' ? '混合' : '纯向量')
+    return parts.length ? parts.join(' · ') : '—'
   } catch {
     return config
   }
@@ -29,6 +32,7 @@ export default function RunsView() {
   const { data: runs, loading, error, reload } = useRequest((s) => api.listRuns(s))
   const [sel, setSel] = useState<number | null>(null)
   const [topK, setTopK] = useState(2)
+  const [retrieval, setRetrieval] = useState<'dense' | 'hybrid'>('hybrid')
   const [selected, setSelected] = useState<number[]>([])
 
   useEffect(() => {
@@ -46,7 +50,7 @@ export default function RunsView() {
 
   const start = async () => {
     if (sel === null) return
-    await api.createRun(sel, { top_k: topK })
+    await api.createRun(sel, { top_k: topK, retrieval })
     reload()
   }
 
@@ -70,6 +74,15 @@ export default function RunsView() {
           onChange={setSel}
         />
         <InputNumber min={1} max={10} value={topK} onChange={(v) => setTopK(v ?? 2)} addonBefore="top_k" />
+        <Select
+          value={retrieval}
+          onChange={setRetrieval}
+          style={{ width: 150 }}
+          options={[
+            { value: 'hybrid', label: '混合检索' },
+            { value: 'dense', label: '纯向量' },
+          ]}
+        />
         <Button type="primary" disabled={sel === null} onClick={start}>
           发起评测
         </Button>

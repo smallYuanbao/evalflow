@@ -23,6 +23,7 @@ const METRIC_LABELS: Record<string, string> = {
 // 复现上下文快照(Ch09):config 里系统快照字段的形态
 type Snapshot = {
   top_k?: number
+  retrieval?: string  // Ch16:dense | hybrid
   knowledge_version?: string
   knowledge_hash?: string
   prompt_version?: string
@@ -174,6 +175,9 @@ export default function RunDetailView() {
       <Card title="复现上下文" style={{ marginBottom: 16 }}>
         <Descriptions column={2} size="small">
           <Descriptions.Item label="top_k">{cfg.top_k ?? '—'}</Descriptions.Item>
+          <Descriptions.Item label="检索方式">
+            {cfg.retrieval === 'hybrid' ? '混合检索(dense+BM25)' : cfg.retrieval === 'dense' ? '纯向量' : '—'}
+          </Descriptions.Item>
           <Descriptions.Item label="知识库版本">{cfg.knowledge_version ?? '—'}</Descriptions.Item>
           <Descriptions.Item label="知识库哈希">{short(cfg.knowledge_hash)}</Descriptions.Item>
           <Descriptions.Item label="Prompt 版本">{cfg.prompt_version ?? '—'}</Descriptions.Item>
@@ -234,7 +238,7 @@ export default function RunDetailView() {
                 hits?.length
                   ? hits.map((h) => (
                       <div key={h.rank}>
-                        <Tag color="blue">#{h.rank} 相似度 {h.score}</Tag> {h.text}
+                        <Tag color="blue">#{h.rank} 融合分 {h.score}</Tag> {h.text}
                       </div>
                     ))
                   : '—',

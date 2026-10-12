@@ -17,7 +17,7 @@ from backend.evaluators import (
 )
 from backend.models import DatasetItem, Generation, Run, Score, Trace
 from backend.pipeline import run_pipeline
-from backend.snapshot import config_top_k
+from backend.snapshot import config_retrieval, config_top_k
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,7 @@ def execute_run(run_id: int) -> None:
         s.close()
         return
     top_k = config_top_k(run.config)
+    retrieval = config_retrieval(run.config)
     rows = s.query(DatasetItem).filter(DatasetItem.dataset_id == run.dataset_id).all()
     # 提前取出普通字段:commit 会让 ORM 对象 expire,detached 后访问会 DetachedInstanceError
     items = [(it.id, it.input, it.expected_output, it.bucket) for it in rows]
@@ -67,7 +68,7 @@ def execute_run(run_id: int) -> None:
     try:
         with ThreadPoolExecutor(max_workers=max(1, settings.run_concurrency)) as pool:
             futures = [
-                pool.submit(_process_item, run_id, iid, inp, exp, bkt, top_k)
+                pool.submit(_process_item, run_id, iid, inp, exp, bkt, top_k, retrieval)
                 for (iid, inp, exp, bkt) in items
             ]
             for done in as_completed(futures):
@@ -83,14 +84,14 @@ def execute_run(run_id: int) -> None:
 
 
 def _process_item(run_id: int, item_id: int, input_: str, expected_output: str,
-                  bucket: str, top_k: int) -> None:
+                  bucket: str, top_k: int, retrieval: str) -> None:
     """单样本评测:检索 + 生成 + 打分 + 写 Trace/Score(独立 session,线程安全)。
 
     LLM judge 在开 session 前算完:写锁跨 LLM 调用时,并发写 SQLite 会 database is locked。
     """
     llm.reset_usage()  # 本样本 token 计量归零(线程复用也能正确隔离)
     t0 = time.time()
-    out = run_pipeline(input_, top_k)
+    out = run_pipeline(input_, top_k, retrieval=retrieval)
     latency_ms = int((time.time() - t0) * 1000)
     hits = [{"text": h["text"], "score": h["score"], "rank": i + 1}
             for i, h in enumerate(out["hits"])]

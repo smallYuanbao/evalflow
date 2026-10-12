@@ -13,7 +13,7 @@ from backend.db import SessionLocal, init_db
 from backend.logging_config import setup_logging
 from backend.models import Dataset, DatasetItem, Run, Score, Trace, _now
 from backend.ratelimit import run_limiter
-from backend.snapshot import build_snapshot, config_top_k
+from backend.snapshot import build_snapshot, config_retrieval, config_top_k
 from backend.stats import aggregate_run, run_export_csv, runs_trend
 from backend.gate import evaluate_gate
 
@@ -155,8 +155,8 @@ def create_run(body: RunIn):
     # 限流(Ch12 防刷):发起评测烧钱,限频率,超限 429
     if not run_limiter.allow():
         raise HTTPException(status_code=429, detail="发起评测过于频繁,请稍后再试")
-    # 复现上下文:发起时快照 top_k + 知识库/prompt 版本 + 模型 + 数据集哈希,存进 config(Ch09)
-    config = build_snapshot(body.dataset_id, config_top_k(body.config))
+    # 复现上下文:发起时快照 top_k + retrieval + 知识库/prompt 版本 + 模型 + 数据集哈希,存进 config(Ch09/Ch16)
+    config = build_snapshot(body.dataset_id, config_top_k(body.config), config_retrieval(body.config))
     s = SessionLocal()
     run = Run(dataset_id=body.dataset_id, status="running",
               config=json.dumps(config, ensure_ascii=False))
