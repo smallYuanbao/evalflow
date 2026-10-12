@@ -11,6 +11,7 @@ import {
 } from 'recharts'
 import { api } from '../api'
 import { useRequest } from '../hooks/useRequest'
+import { formatTime } from '../utils/time'
 
 // 指标 key → 中文标签(与 RunDetailView / CompareView 一致)
 const METRIC_LABELS: Record<string, string> = {
@@ -96,7 +97,7 @@ export default function TrendView() {
                       {p.name}
                       {p.dataset ? ` · ${p.dataset}` : ''}
                     </div>
-                    {p.time && <div style={{ color: '#888' }}>{p.time.replace('T', ' ')}</div>}
+                    {p.time && <div style={{ color: '#888' }}>{formatTime(p.time)}</div>}
                     <div>
                       {METRIC_LABELS[metric]}: {p.value.toFixed(4)}
                     </div>

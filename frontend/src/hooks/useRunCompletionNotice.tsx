@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { notification } from 'antd'
+import { Button, notification } from 'antd'
 import type { Run } from '../types'
 
 // 检测 run 从「运行中」跃迁到 完成/失败,弹一次非阻塞通知。
@@ -17,12 +17,16 @@ export function useRunCompletionNotice(
       const before = prev.current[r.id]
       // 只在「运行中 → 终态」这一次跃迁时通知;首次加载时已在跑的 run 记下状态,完成时照样通知
       if (before === 'running' && r.status !== 'running') {
-        const common = { placement: 'bottomRight' as const, duration: 6 }
+        const common = { placement: 'bottomRight' as const, duration: 8 }
         if (r.status === 'done') {
           notification.success({
             message: `评测 #${r.id} 已完成`,
-            description: onView ? '点击查看结果' : undefined,
-            onClick: onView ? () => onView(r.id) : undefined,
+            // 用 btn 给一个看得出来的按钮:光写「点击查看」用户不知道能点(Ch22 UI 反馈)
+            btn: onView ? (
+              <Button type="primary" size="small" onClick={() => onView(r.id)}>
+                查看结果
+              </Button>
+            ) : undefined,
             ...common,
           })
         } else {

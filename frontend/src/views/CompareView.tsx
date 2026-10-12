@@ -3,6 +3,7 @@ import { Alert, Button, Card, Empty, Result, Skeleton, Table, Tag } from 'antd'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { api } from '../api'
 import { useRequest } from '../hooks/useRequest'
+import { COMPARE_COLORS } from '../utils/compare'
 import type { RunDetail, RunDiffSide } from '../types'
 
 // 指标 key → 中文标签(与 RunDetailView 一致)
@@ -18,8 +19,6 @@ const METRIC_LABELS: Record<string, string> = {
   rejection: '拒答率',
 }
 
-const COLORS = ['#3b82f6', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899']
-
 const fmt = (v: number | null) => (v === null ? '—' : v.toFixed(4))
 
 function topKOf(run: RunDetail): string {
@@ -29,6 +28,12 @@ function topKOf(run: RunDetail): string {
   } catch {
     return ''
   }
+}
+
+// 表格列头与图例用同一套标签,避免「同一个 run 两种表示」
+function runLabel(r: RunDetail): string {
+  const cfg = topKOf(r)
+  return cfg ? `Run #${r.id}(${cfg})` : `Run #${r.id}`
 }
 
 // 逐条 Diff 的一侧(Ch18):证据 + 分数
@@ -100,17 +105,15 @@ export default function CompareView() {
         rowKey="metric"
         size="small"
         style={{ marginBottom: 16 }}
+        scroll={{ x: 'max-content' }} // 列数随 run 数增长,横向滚动兜底,别撑坏布局
         dataSource={rows}
         columns={[
           { title: '指标', dataIndex: 'metric' },
-          ...runs.map((r) => {
-            const cfg = topKOf(r)
-            return {
-              title: cfg ? `Run #${r.id}(${cfg})` : `Run #${r.id}`,
-              dataIndex: `run_${r.id}`,
-              render: fmt,
-            }
-          }),
+          ...runs.map((r) => ({
+            title: runLabel(r),
+            dataIndex: `run_${r.id}`,
+            render: fmt,
+          })),
         ]}
       />
       {hasValue ? (
@@ -122,7 +125,12 @@ export default function CompareView() {
             <Tooltip />
             <Legend />
             {runs.map((r, i) => (
-              <Bar key={r.id} dataKey={`run_${r.id}`} name={`Run #${r.id}`} fill={COLORS[i % COLORS.length]} />
+              <Bar
+                key={r.id}
+                dataKey={`run_${r.id}`}
+                name={runLabel(r)}
+                fill={COMPARE_COLORS[i % COMPARE_COLORS.length]}
+              />
             ))}
           </BarChart>
         </ResponsiveContainer>

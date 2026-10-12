@@ -26,8 +26,9 @@ test('对比多个 run:并排展示各指标列', async () => {
   )
   await waitFor(() => expect(screen.getByText('多 run 对比')).toBeInTheDocument())
   // 两个 run 各一列,列头带 Run 编号 + top_k(来自各自 config 快照)
-  expect(screen.getByText('Run #1(top_k=2)')).toBeInTheDocument()
-  expect(screen.getByText('Run #2(top_k=5)')).toBeInTheDocument()
+  // 表头与图例统一用同一套标签,所以各出现两次 → getAllByText
+  expect(screen.getAllByText('Run #1(top_k=2)').length).toBeGreaterThan(0)
+  expect(screen.getAllByText('Run #2(top_k=5)').length).toBeGreaterThan(0)
   expect(screen.getByText('召回(机械)')).toBeInTheDocument() // 指标行
 })
 

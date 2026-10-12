@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button, InputNumber, Result, Select, Skeleton, Space, Table, Tag } from 'antd'
+import { Button, InputNumber, message, Result, Select, Skeleton, Space, Table, Tag } from 'antd'
 import { api } from '../api'
 import { useRequest } from '../hooks/useRequest'
 import { useRunCompletionNotice } from '../hooks/useRunCompletionNotice'
+import { MAX_COMPARE_RUNS } from '../utils/compare'
+import { formatTime } from '../utils/time'
 import type { Run } from '../types'
 
 const STATUS: Record<string, { color: string; text: string }> = {
@@ -96,10 +98,47 @@ export default function RunsView() {
           对比({selected.length})
         </Button>
       </Space>
+      {/* 跨页勾选后只看得到一个数字,看不出选了谁、想取消还得翻回那页。
+          把已选项铺成可删除的标签:看得见 + 不用翻页就能取消(Ch22)。 */}
+      {selected.length > 0 && (
+        <Space wrap size={[4, 8]} style={{ marginTop: -8 }}>
+          <span style={{ color: '#888' }}>已选:</span>
+          {selected.map((id) => {
+            const r = runs?.find((x) => x.id === id)
+            return (
+              <Tag
+                key={id}
+                closable
+                color="blue"
+                title={r?.dataset_name ? `Run #${id} · ${r.dataset_name}` : `Run #${id}`}
+                onClose={(e) => {
+                  e.preventDefault() // 列表由我们受控,阻止 Tag 自行移除
+                  setSelected((prev) => prev.filter((x) => x !== id))
+                }}
+              >
+                Run #{id}
+              </Tag>
+            )
+          })}
+          <Button size="small" onClick={() => setSelected([])}>
+            清空
+          </Button>
+        </Space>
+      )}
       <Table
         rowKey="id"
         dataSource={runs ?? []}
-        rowSelection={{ selectedRowKeys: selected, onChange: (keys) => setSelected(keys as number[]) }}
+        rowSelection={{
+          selectedRowKeys: selected,
+          // 超上限就拒掉这次选择:对比页的调色板只有 6 色,选更多颜色会重复、图不可读(Ch22)
+          onChange: (keys) => {
+            if (keys.length > MAX_COMPARE_RUNS) {
+              message.warning(`最多同时对比 ${MAX_COMPARE_RUNS} 个 run(再多颜色就分不清了)`)
+              return
+            }
+            setSelected(keys as number[])
+          },
+        }}
         columns={[
           { title: 'ID', dataIndex: 'id' },
           { title: '评测集', dataIndex: 'dataset_name' },
@@ -114,7 +153,7 @@ export default function RunsView() {
               </Space>
             ),
           },
-          { title: '时间', dataIndex: 'created_at' },
+          { title: '时间', dataIndex: 'created_at', render: (v?: string) => formatTime(v) },
           {
             title: '操作',
             key: 'action',
