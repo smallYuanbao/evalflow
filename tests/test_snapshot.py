@@ -44,7 +44,8 @@ def test_build_snapshot_fields_and_dataset_hash():
     assert snap["retrieval"] == "hybrid"  # 默认 hybrid(Ch16)
     assert snapshot.build_snapshot(did, top_k=3, retrieval="dense")["retrieval"] == "dense"
     assert snap["knowledge_version"] == snapshot.KNOWLEDGE_VERSION
-    assert snap["prompt_version"] == snapshot.PROMPTS_VERSION
+    assert snap["pipeline_prompt_version"] == snapshot.PIPELINE_PROMPT_VERSION
+    assert snap["judge_prompt_version"] == snapshot.JUDGE_PROMPTS_VERSION
     assert snap["item_count"] == 1
     assert len(snap["dataset_hash"]) == 32      # md5
     assert len(snap["knowledge_hash"]) == 32

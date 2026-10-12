@@ -12,6 +12,8 @@ from backend.evaluators import (
     context_precision,
     context_recall,
     faithfulness,
+    hit_at_k,
+    mrr,
     recall,
     rejected,
 )
@@ -127,11 +129,15 @@ def _process_item(run_id: int, item_id: int, input_: str, expected_output: str,
         # recall 机械基线(确定性,0 次 LLM)
         s.add(Score(trace_id=tr.id, name="recall",
                     value=recall(expected_output, out["retrieved_context"])))
+        # 检索质量机械指标(Ch20):hit@k / MRR,从有序 hits 算,同样不烧 LLM
+        s.add(Score(trace_id=tr.id, name="hit_at_k", value=hit_at_k(expected_output, out["hits"])))
+        s.add(Score(trace_id=tr.id, name="mrr", value=mrr(expected_output, out["hits"])))
         for name, r in judges:
             if r is None:
                 s.add(Score(trace_id=tr.id, name=name, value=None, comment="judge 失败"))
             else:
-                s.add(Score(trace_id=tr.id, name=name, value=r["score"], comment=r["reason"]))
+                s.add(Score(trace_id=tr.id, name=name, value=r["score"],
+                            variance=r.get("variance"), comment=r["reason"]))
     s.commit()
     s.close()
     logger.info("样本评测完成", extra={"run_id": run_id, "trace_id": trace_id, "latency_ms": latency_ms})

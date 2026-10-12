@@ -41,13 +41,13 @@ class Run(Base):
     status = Column(String, default="running")  # running / done / failed
     config = Column(Text, default="{}")         # 配置快照 JSON
     progress = Column(Integer, default=0)       # 已完成样本数(进度,Ch10)
-    created_at = Column(String, default=_now)
+    created_at = Column(String, default=_now, index=True)  # 列表按时间倒序,加索引(Ch19)
 
 
 class Trace(Base):
     __tablename__ = "traces"
     id = Column(Integer, primary_key=True)
-    run_id = Column(Integer, ForeignKey("runs.id"))
+    run_id = Column(Integer, ForeignKey("runs.id"), index=True)  # 按 run 查 trace 高频,加索引(Ch19)
     dataset_item_id = Column(Integer, ForeignKey("dataset_items.id"))
     input = Column(Text)
     output = Column(Text)
@@ -73,5 +73,6 @@ class Score(Base):
     trace_id = Column(Integer, ForeignKey("traces.id"))
     name = Column(String)                 # faithfulness / recall / ...
     value = Column(Float, nullable=True)  # NULL = 没评上(别记 0)
+    variance = Column(Float, nullable=True)  # judge 采样方差(Ch20);机械指标为 None
     comment = Column(Text, default="")
     created_at = Column(String, default=_now)

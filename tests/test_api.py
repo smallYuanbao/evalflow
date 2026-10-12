@@ -65,7 +65,7 @@ def test_list_runs_and_items(monkeypatch):
     assert ours_run["dataset_name"] == "t"  # run 列表带评测集名称
     cfg = json.loads(ours_run["config"])  # 列表回看复现上下文快照(Ch09)
     assert cfg["top_k"] == 3
-    assert cfg["knowledge_version"] and cfg["prompt_version"]
+    assert cfg["knowledge_version"] and cfg["pipeline_prompt_version"] and cfg["judge_prompt_version"]
     assert cfg["dataset_hash"] and cfg["item_count"] == 1
 
 
@@ -283,7 +283,8 @@ def test_bucket_attribution_deltas():
 
 
 def test_model_comparison():
-    # Ch19:按 chat_model 分组 done run;用唯一模型名避免共享库里的历史 run 干扰
+    # Ch19:按 chat_model 分组 done run;模型名带时间戳,避免共享库跨测试运行累积
+    import time
     from backend.db import SessionLocal, init_db
     from backend.models import Dataset, DatasetItem, Run, Score, Trace
 
@@ -305,16 +306,18 @@ def test_model_comparison():
         s.flush()
         s.add(Score(trace_id=t.id, name="faithfulness", value=score))
 
-    _run("model-test-a", 0.8)
-    _run("model-test-a", 0.9)
-    _run("model-test-b", 0.95)
+    ma = f"model-a-{time.time_ns()}"
+    mb = f"model-b-{time.time_ns()}"
+    _run(ma, 0.8)
+    _run(ma, 0.9)
+    _run(mb, 0.95)
     s.commit()
     s.close()
 
     data = client.get("/runs/model-comparison").json()
     by_model = {m["model"]: m for m in data["models"]}
-    assert by_model["model-test-a"]["run_count"] == 2
-    assert abs(by_model["model-test-a"]["avg_scores"]["faithfulness"] - 0.85) < 1e-6
-    assert by_model["model-test-b"]["run_count"] == 1
-    assert abs(by_model["model-test-b"]["avg_scores"]["faithfulness"] - 0.95) < 1e-6
-    assert by_model["model-test-a"]["avg_cost"] == 0.0  # 无 generation 计量,成本为 0
+    assert by_model[ma]["run_count"] == 2
+    assert abs(by_model[ma]["avg_scores"]["faithfulness"] - 0.85) < 1e-6
+    assert by_model[mb]["run_count"] == 1
+    assert abs(by_model[mb]["avg_scores"]["faithfulness"] - 0.95) < 1e-6
+    assert by_model[ma]["avg_cost"] == 0.0  # 无 generation 计量,成本为 0

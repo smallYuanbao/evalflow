@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
-import { Button, Card, Descriptions, Result, Select, Skeleton, Table, Tag, message } from 'antd'
+import { useNavigate, useParams } from 'react-router-dom'
+import { Button, Card, Descriptions, Result, Select, Skeleton, Space, Table, Tag, message } from 'antd'
 import { api } from '../api'
 import { useRequest } from '../hooks/useRequest'
 import type { BucketAttribution, GateCheck, TraceRow } from '../types'
@@ -12,6 +12,8 @@ const fmt = (v: number | null) => (v === null ? '—' : v.toFixed(4))
 // 指标 key → 中文标签(后端只认 key,展示文案放前端)
 const METRIC_LABELS: Record<string, string> = {
   recall: '召回(机械)',
+  hit_at_k: '命中@k',
+  mrr: 'MRR',
   context_precision: '上下文精度',
   context_recall: '上下文召回',
   faithfulness: '忠实度',
@@ -26,7 +28,8 @@ type Snapshot = {
   retrieval?: string  // Ch16:dense | hybrid
   knowledge_version?: string
   knowledge_hash?: string
-  prompt_version?: string
+  pipeline_prompt_version?: string  // Ch19:生成 prompt 版本
+  judge_prompt_version?: string     // Ch19:judge prompt 版本
   chat_model?: string
   embed_model?: string
   dataset_hash?: string
@@ -36,6 +39,7 @@ type Snapshot = {
 export default function RunDetailView() {
   const { runId } = useParams()
   const id = Number(runId)
+  const nav = useNavigate()
   const { data: run, loading, error, reload } = useRequest((s) => api.getRun(id, s), [id])
   const { data: traces, reload: reloadTraces } = useRequest((s) => api.listTraces(id, s), [id])
   const [chartMetric, setChartMetric] = useState<string | null>(null)
@@ -101,6 +105,20 @@ export default function RunDetailView() {
     )
   if (!run) return null
 
+  // 一键复跑(Ch20):按快照的 top_k + retrieval 重新发起同配置 run
+  const rerun = async () => {
+    try {
+      const res = await api.createRun(run.dataset_id, {
+        top_k: cfg.top_k ?? 2,
+        retrieval: cfg.retrieval === 'dense' ? 'dense' : 'hybrid',
+      })
+      message.success(`已发起复跑 Run #${res.id}`)
+      nav(`/runs/${res.id}`)
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : '复跑失败')
+    }
+  }
+
   const metricKeys = Object.keys(run.scores)
   // 柱状图指标:用户选过且当前 run 有 → 尊重选择;否则默认 recall,没有则第一个(与 Ch05 回退一致)
   const effective = chartMetric && metricKeys.includes(chartMetric)
@@ -123,7 +141,10 @@ export default function RunDetailView() {
             </span>
           )}
         </h2>
-        <Button onClick={exportCsv}>导出 CSV</Button>
+        <Space>
+          <Button onClick={rerun}>一键复跑</Button>
+          <Button onClick={exportCsv}>导出 CSV</Button>
+        </Space>
       </div>
       <Card
         title="回归门禁"
@@ -207,6 +228,9 @@ export default function RunDetailView() {
           <Descriptions.Item label="总费用(元)">
             {run.cost === undefined ? '—' : run.cost.toFixed(6)}
           </Descriptions.Item>
+          <Descriptions.Item label="单条平均成本(元)">
+            {run.cost === undefined || !run.item_count ? '—' : (run.cost / run.item_count).toFixed(6)}
+          </Descriptions.Item>
         </Descriptions>
       </Card>
       <Card title="复现上下文" style={{ marginBottom: 16 }}>
@@ -217,7 +241,8 @@ export default function RunDetailView() {
           </Descriptions.Item>
           <Descriptions.Item label="知识库版本">{cfg.knowledge_version ?? '—'}</Descriptions.Item>
           <Descriptions.Item label="知识库哈希">{short(cfg.knowledge_hash)}</Descriptions.Item>
-          <Descriptions.Item label="Prompt 版本">{cfg.prompt_version ?? '—'}</Descriptions.Item>
+          <Descriptions.Item label="Pipeline Prompt 版本">{cfg.pipeline_prompt_version ?? '—'}</Descriptions.Item>
+          <Descriptions.Item label="Judge Prompt 版本">{cfg.judge_prompt_version ?? '—'}</Descriptions.Item>
           <Descriptions.Item label="生成模型">{cfg.chat_model || '—'}</Descriptions.Item>
           <Descriptions.Item label="Embedding 模型">{cfg.embed_model || '—'}</Descriptions.Item>
           <Descriptions.Item label="数据集哈希">{short(cfg.dataset_hash)}</Descriptions.Item>
@@ -305,6 +330,11 @@ export default function RunDetailView() {
                         <div>
                           <Tag color="blue">{METRIC_LABELS[s.name] ?? s.name}</Tag>
                           <span style={{ fontWeight: 600 }}>{s.value ?? '—'}</span>
+                          {s.variance != null && (
+                            <span style={{ color: '#999', fontSize: 12, marginLeft: 6 }}>
+                              方差 {s.variance.toFixed(6)}
+                            </span>
+                          )}
                         </div>
                         {s.comment ? (
                           <div style={{ color: '#666', fontSize: 12, marginTop: 4 }}>{s.comment}</div>

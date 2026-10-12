@@ -15,6 +15,8 @@ import { useRequest } from '../hooks/useRequest'
 // 指标 key → 中文标签(与 RunDetailView / CompareView 一致)
 const METRIC_LABELS: Record<string, string> = {
   recall: '召回(机械)',
+  hit_at_k: '命中@k',
+  mrr: 'MRR',
   context_precision: '上下文精度',
   context_recall: '上下文召回',
   faithfulness: '忠实度',

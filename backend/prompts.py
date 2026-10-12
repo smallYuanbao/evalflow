@@ -1,5 +1,7 @@
-# 版本标识:prompt 改动必须 bump 版本,保证历史 run 的 prompt 可追溯(Ch09 可复现)
-PROMPTS_VERSION = "v1"
+# 版本标识:prompt 改动必须 bump 版本,保证历史 run 的 prompt 可追溯(Ch09 可复现)。
+# Ch19 拆分:生成 prompt 与 judge prompt 各自独立版本,否则「模型变了还是评判标准变了」分不清。
+PIPELINE_PROMPT_VERSION = "v1"
+JUDGE_PROMPTS_VERSION = "v1"
 
 # pipeline 生成阶段的 system prompt(从 pipeline.py 迁入,统一在这里管版本)
 PIPELINE_SYSTEM_PROMPT = "你是育儿客服助手,只依据给定证据回答,证据没有就说不清楚。"

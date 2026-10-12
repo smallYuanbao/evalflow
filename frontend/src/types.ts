@@ -53,7 +53,7 @@ export interface TraceRow {
   retrieved_context: string
   retrieval_hits?: { text: string; score: number; rank: number }[]
   latency_ms: number
-  scores: { name: string; value: number | null; comment?: string }[]  // comment = Judge reason(Ch18)
+  scores: { name: string; value: number | null; comment?: string; variance?: number | null }[]  // comment = Judge reason; variance = 采样方差(Ch20)
 }
 
 // 逐条 Diff(Ch18):两条 run 按 dataset_item_id 匹配后的并排对比

@@ -4,7 +4,7 @@ import json
 
 from backend.config import settings
 from backend.knowledge import KNOWLEDGE, KNOWLEDGE_VERSION
-from backend.prompts import PROMPTS_VERSION
+from backend.prompts import JUDGE_PROMPTS_VERSION, PIPELINE_PROMPT_VERSION
 
 
 def config_top_k(config_str: str) -> int:
@@ -48,7 +48,8 @@ def build_snapshot(dataset_id: int, top_k: int, retrieval: str = "hybrid") -> di
         "retrieval": retrieval,  # Ch16:dense|hybrid,记录「这次用哪种检索跑出来的」
         "knowledge_version": KNOWLEDGE_VERSION,
         "knowledge_hash": content_hash(KNOWLEDGE),
-        "prompt_version": PROMPTS_VERSION,
+        "pipeline_prompt_version": PIPELINE_PROMPT_VERSION,
+        "judge_prompt_version": JUDGE_PROMPTS_VERSION,
         "chat_model": settings.chat_model,
         "embed_model": settings.embed_model,
         "dataset_hash": content_hash(items),

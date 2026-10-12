@@ -26,6 +26,32 @@ def recall(expected_output: str, retrieved_context: str) -> float:
     return round(hits / len(points), 4)
 
 
+def _points(expected_output: str) -> list[str]:
+    return [p.strip() for p in expected_output.split("/") if p.strip()]
+
+
+def hit_at_k(expected_output: str, hits: list[dict]) -> float:
+    """检索命中率@k(Ch20):top-k 里是否命中任一相关 chunk(0/1)。
+
+    相关 = chunk 文本含任一要点(与 recall 同源推导,零新增标注)。
+    """
+    points = _points(expected_output)
+    if not points:
+        return 0.0
+    return 1.0 if any(any(p in h["text"] for p in points) for h in hits) else 0.0
+
+
+def mrr(expected_output: str, hits: list[dict]) -> float:
+    """MRR 倒数排名(Ch20):1 / 首个相关 chunk 的排名;没有相关命中则 0。"""
+    points = _points(expected_output)
+    if not points:
+        return 0.0
+    for i, h in enumerate(hits):
+        if any(p in h["text"] for p in points):
+            return round(1.0 / (i + 1), 4)
+    return 0.0
+
+
 def _judge(prompt: str) -> dict | None:
     """LLM judge:采样 judge_samples 次取均值(更稳),全部失败返回 None(记 NULL 不记 0)。"""
     scores: list[float] = []
@@ -43,7 +69,14 @@ def _judge(prompt: str) -> dict | None:
             continue
     if not scores:
         return None
-    return {"score": round(sum(scores) / len(scores), 4), "reason": reason}
+    mean = sum(scores) / len(scores)
+    # 采样方差(Ch20):识别「不稳定 judge」;单样本无法定义方差,记 None
+    variance = sum((s - mean) ** 2 for s in scores) / len(scores) if len(scores) > 1 else None
+    return {
+        "score": round(mean, 4),
+        "variance": round(variance, 6) if variance is not None else None,
+        "reason": reason,
+    }
 
 
 def faithfulness(output: str, retrieved_context: str) -> dict | None:

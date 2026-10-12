@@ -13,7 +13,7 @@ JUDGES = {
     "answer_correctness": lambda q, e, o: {"score": 0.5, "reason": "ok"},
 }
 
-INBUCKET = set(JUDGES) | {"recall"}  # 库内题:机械 recall + 5 个 judge
+INBUCKET = set(JUDGES) | {"recall", "hit_at_k", "mrr"}  # 库内题:机械指标 + 5 个 judge
 ABSENT = {"rejection"}               # 库外题:只评拒答
 
 

@@ -2,6 +2,8 @@
 # 加指标 = 这里加一行 + run_service 加一个 judge 调用 + 前端标签映射加一行。
 METRIC_ORDER = [
     "recall",
+    "hit_at_k",
+    "mrr",
     "context_precision",
     "context_recall",
     "faithfulness",

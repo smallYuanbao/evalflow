@@ -416,7 +416,7 @@ def list_traces(run_id: int):
     s = SessionLocal()
     out = []
     for tr in s.query(Trace).filter(Trace.run_id == run_id):
-        scs = [{"name": sc.name, "value": sc.value, "comment": sc.comment}
+        scs = [{"name": sc.name, "value": sc.value, "comment": sc.comment, "variance": sc.variance}
                for sc in s.query(Score).filter(Score.trace_id == tr.id)]
         out.append({"trace_id": tr.id, "input": tr.input, "output": tr.output,
                     "retrieved_context": tr.retrieved_context,

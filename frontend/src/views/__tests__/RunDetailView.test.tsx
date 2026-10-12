@@ -13,6 +13,7 @@ vi.mock('../../api', () => ({
     getRunGate: vi.fn().mockResolvedValue({ passed: true, checks: [], run_id: 1, baseline_run_id: null }),
     getRunCalibration: vi.fn().mockResolvedValue({ run_id: 1, metrics: {} }),
     getBucketAttribution: vi.fn().mockResolvedValue(null),
+    createRun: vi.fn().mockResolvedValue({ id: 100, dataset_id: 1, status: 'running' }),
   },
 }))
 
@@ -87,7 +88,8 @@ test('展示复现上下文快照(Ch09)', async () => {
       top_k: 3,
       knowledge_version: 'v1',
       knowledge_hash: 'abcd1234efgh',
-      prompt_version: 'v1',
+      pipeline_prompt_version: 'v1',
+      judge_prompt_version: 'v1',
       chat_model: 'deepseek-chat',
       embed_model: 'bge-m3',
       dataset_hash: '9876fedc5432',
@@ -106,7 +108,8 @@ test('展示复现上下文快照(Ch09)', async () => {
   )
   await waitFor(() => expect(screen.getByText('复现上下文')).toBeInTheDocument())
   expect(screen.getByText('知识库版本')).toBeInTheDocument()
-  expect(screen.getByText('Prompt 版本')).toBeInTheDocument()
+  expect(screen.getByText('Pipeline Prompt 版本')).toBeInTheDocument()
+  expect(screen.getByText('Judge Prompt 版本')).toBeInTheDocument()
   expect(screen.getByText('deepseek-chat')).toBeInTheDocument()
   expect(screen.getByText('abcd1234')).toBeInTheDocument() // 知识库哈希截断前 8 位
 })
@@ -190,7 +193,7 @@ test('逐条明细展开行能看到 Judge reason(Ch18)', async () => {
       retrieved_context: '物理降温 观察体温',
       retrieval_hits: [{ text: '物理降温', score: 0.9, rank: 1 }],
       latency_ms: 10,
-      scores: [{ name: 'faithfulness', value: 0.8, comment: '回答忠于证据' }],
+      scores: [{ name: 'faithfulness', value: 0.8, comment: '回答忠于证据', variance: 0.001 }],
     },
   ])
   const { container } = render(
@@ -206,6 +209,7 @@ test('逐条明细展开行能看到 Judge reason(Ch18)', async () => {
   fireEvent.click(btn!)
   await waitFor(() => expect(screen.getByText('回答忠于证据')).toBeInTheDocument())
   expect(screen.getByText(/证据上下文/)).toBeInTheDocument()
+  expect(screen.getByText(/方差 0\.001000/)).toBeInTheDocument() // Ch20 judge 采样方差
 })
 
 test('展示 Judge 校准卡(Ch18)', async () => {
@@ -260,4 +264,27 @@ test('展示分桶归因(Ch19)', async () => {
   await waitFor(() => expect(screen.getByText(/分桶归因/)).toBeInTheDocument())
   expect(screen.getAllByText('护理').length).toBeGreaterThan(0) // 分桶聚合表 + 归因表都有
   expect(screen.getByText(/\+0\.1000/)).toBeInTheDocument() // 归因 delta 绿标
+})
+
+test('复跑按钮按快照配置发起新 run(Ch20)', async () => {
+  vi.mocked(api.getRun).mockResolvedValue({
+    id: 10,
+    dataset_id: 5,
+    status: 'done',
+    config: JSON.stringify({ top_k: 3, retrieval: 'dense' }),
+    item_count: 1,
+    scores: { recall: 0.75 },
+    by_bucket: { 护理: { count: 1, recall: 0.75 } },
+  })
+  const createRun = vi.mocked(api.createRun).mockResolvedValue({ id: 100, dataset_id: 5, status: 'running' })
+  render(
+    <MemoryRouter initialEntries={['/runs/10']}>
+      <Routes>
+        <Route path="/runs/:runId" element={<RunDetailView />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  await waitFor(() => expect(screen.getByText('一键复跑')).toBeInTheDocument())
+  fireEvent.click(screen.getByRole('button', { name: '一键复跑' }))
+  await waitFor(() => expect(createRun).toHaveBeenCalledWith(5, { top_k: 3, retrieval: 'dense' }))
 })

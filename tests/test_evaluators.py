@@ -11,6 +11,20 @@ def test_recall_partial_hit():
     assert evaluators.recall("物理降温/就医/用药", ctx) == round(1 / 3, 4)
 
 
+def test_hit_at_k():
+    hits = [{"text": "物理降温", "score": 0.9}, {"text": "睡眠", "score": 0.8}]
+    assert evaluators.hit_at_k("物理降温/就医", hits) == 1.0   # 首个命中
+    assert evaluators.hit_at_k("就医/用药", hits) == 0.0         # 全没命中
+    assert evaluators.hit_at_k("", hits) == 0.0                  # 无要点
+
+
+def test_mrr():
+    hits = [{"text": "睡眠", "score": 0.9}, {"text": "就医", "score": 0.8}]
+    assert evaluators.mrr("物理降温/就医", hits) == 0.5   # 就医排第 2
+    assert evaluators.mrr("物理降温/用药", hits) == 0.0    # 全没相关
+    assert evaluators.mrr("睡眠/就医", hits) == 1.0        # 睡眠排第 1
+
+
 def test_rejected_hits_marker():
     assert evaluators.rejected("抱歉，目前没有相关证据，我不清楚怎么处理。") == 1.0
 
@@ -21,7 +35,7 @@ def test_rejected_no_marker():
 
 def test_judge_returns_score(monkeypatch):
     monkeypatch.setattr(evaluators.llm, "chat_json", lambda *a, **kw: {"score": 0.9, "reason": "ok"})
-    assert evaluators.faithfulness("答", "证") == {"score": 0.9, "reason": "ok"}
+    assert evaluators.faithfulness("答", "证") == {"score": 0.9, "variance": None, "reason": "ok"}
 
 
 def test_judge_clamps_score(monkeypatch):
@@ -63,6 +77,22 @@ def test_judge_samples_average(monkeypatch):
                         lambda *a, **kw: {"score": next(scores), "reason": "ok"})
     r = evaluators.faithfulness("a", "c")
     assert r["score"] == round((0.6 + 0.9 + 1.0) / 3, 4)
+
+
+def test_judge_variance(monkeypatch):
+    # 多采样时算方差;单采样方差为 None(Ch20)
+    monkeypatch.setattr(evaluators.settings, "judge_samples", 3)
+    scores = iter([0.6, 0.9, 1.0])
+    monkeypatch.setattr(evaluators.llm, "chat_json",
+                        lambda *a, **kw: {"score": next(scores), "reason": "ok"})
+    r = evaluators.faithfulness("a", "c")
+    mean = (0.6 + 0.9 + 1.0) / 3
+    expected_var = ((0.6 - mean) ** 2 + (0.9 - mean) ** 2 + (1.0 - mean) ** 2) / 3
+    assert abs(r["variance"] - expected_var) < 1e-6
+
+    monkeypatch.setattr(evaluators.settings, "judge_samples", 1)
+    monkeypatch.setattr(evaluators.llm, "chat_json", lambda *a, **kw: {"score": 0.8, "reason": "ok"})
+    assert evaluators.faithfulness("a", "c")["variance"] is None
 
 
 def test_judge_samples_skip_failures(monkeypatch):
