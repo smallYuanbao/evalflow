@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, InputNumber, Result, Select, Skeleton, Space, Table, Tag } from 'antd'
 import { api } from '../api'
 import { useRequest } from '../hooks/useRequest'
+import { useRunCompletionNotice } from '../hooks/useRunCompletionNotice'
 import type { Run } from '../types'
 
 const STATUS: Record<string, { color: string; text: string }> = {
@@ -42,7 +43,12 @@ export default function RunsView() {
     return () => clearInterval(t)
   }, [runs, reload])
 
-  if (loading) return <Skeleton active paragraph={{ rows: 6 }} />
+  // 完成/失败时飘一条通知(非阻塞),点一下跳到该 run
+  const onViewRun = useCallback((id: number) => nav(`/runs/${id}`), [nav])
+  useRunCompletionNotice(runs ?? [], onViewRun)
+
+  // 只在「首次加载、还没有数据」时显示骨架:否则轮询每次刷新都会整页闪成骨架屏
+  if (loading && !runs) return <Skeleton active paragraph={{ rows: 6 }} />
   if (error)
     return (
       <Result status="error" title="加载失败" subTitle={error} extra={<Button onClick={reload}>重试</Button>} />

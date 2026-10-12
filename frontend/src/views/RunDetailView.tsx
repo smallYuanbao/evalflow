@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Button, Card, Descriptions, Result, Select, Skeleton, Space, Table, Tag, message } from 'antd'
 import { api } from '../api'
 import { useRequest } from '../hooks/useRequest'
+import { useRunCompletionNotice } from '../hooks/useRunCompletionNotice'
 import type { BucketAttribution, GateCheck, TraceRow } from '../types'
 import MetricCard from '../components/MetricCard'
 import BucketChart from '../components/BucketChart'
@@ -75,6 +76,9 @@ export default function RunDetailView() {
     return () => clearInterval(t)
   }, [run?.status, reload, reloadTraces])
 
+  // 本 run 完成/失败时飘一条通知(详情页停留在页面上也能感知)
+  useRunCompletionNotice(run ? [run] : [])
+
   // 导出 CSV(Ch13):带鉴权头走 axios 拉文本,再 Blob 触发浏览器下载
   const exportCsv = async () => {
     try {
@@ -98,7 +102,8 @@ export default function RunDetailView() {
   }, [run?.config])
   const short = (v?: string) => (v ? v.slice(0, 8) : '—')
 
-  if (loading) return <Skeleton active paragraph={{ rows: 8 }} />
+  // 只在「首次加载、还没有数据」时显示骨架:否则轮询每次刷新都会整页闪成骨架屏
+  if (loading && !run) return <Skeleton active paragraph={{ rows: 8 }} />
   if (error)
     return (
       <Result status="error" title="加载失败" subTitle={error} extra={<Button onClick={reload}>重试</Button>} />
