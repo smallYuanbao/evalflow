@@ -36,13 +36,20 @@ def test_rejected_no_marker():
 def test_rejected_recognizes_scope_refusal():
     """Ch27:接真实系统 baby-ai 时补的措辞——它拒答时说「超出专业范围」而不是「不知道」。
 
-    用 baby-ai 的**真实回答原文**做用例,而不是编一个理想化的句子。
+    全部用 baby-ai 的**真实回答原文**(含 emoji / markdown),不用理想化句子。
     """
+    # Run 6 / 8 的说法
     car = ("🏷️ **先给结论**：\n抱歉，我只能回答育儿相关问题哦～ 换汽车轮胎属于汽车维修领域，"
            "不在我的专业范围内，我不能给您不专业的建议。")
     travel = "抱歉，我只能回答育儿相关问题哦～🐻\n\n不过如果您是想**带宝宝去北京玩**，那我可以帮上忙——比如："
     assert evaluators.rejected(car) == 1.0
     assert evaluators.rejected(travel) == 1.0
+
+    # Run 9 换了说法:少了个「我」,还说成「不属于我能回答的范围」——
+    # 第一版词表写死「我只能回答」,这条就漏了。用例留着防这种措辞漂移。
+    run9_travel = ("🏷️ **先给结论**：抱歉，我是育儿助手小熊🐻，只能回答育儿相关问题哦～"
+                   "「北京旅游景点推荐」不属于我能回答的范围，我的建议也会误导你。")
+    assert evaluators.rejected(run9_travel) == 1.0
 
 
 def test_judge_returns_score(monkeypatch):
