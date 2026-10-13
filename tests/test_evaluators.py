@@ -33,6 +33,18 @@ def test_rejected_no_marker():
     assert evaluators.rejected("宝宝发烧可以物理降温。") == 0.0
 
 
+def test_rejected_recognizes_scope_refusal():
+    """Ch27:接真实系统 baby-ai 时补的措辞——它拒答时说「超出专业范围」而不是「不知道」。
+
+    用 baby-ai 的**真实回答原文**做用例,而不是编一个理想化的句子。
+    """
+    car = ("🏷️ **先给结论**：\n抱歉，我只能回答育儿相关问题哦～ 换汽车轮胎属于汽车维修领域，"
+           "不在我的专业范围内，我不能给您不专业的建议。")
+    travel = "抱歉，我只能回答育儿相关问题哦～🐻\n\n不过如果您是想**带宝宝去北京玩**，那我可以帮上忙——比如："
+    assert evaluators.rejected(car) == 1.0
+    assert evaluators.rejected(travel) == 1.0
+
+
 def test_judge_returns_score(monkeypatch):
     monkeypatch.setattr(evaluators.llm, "chat_json", lambda *a, **kw: {"score": 0.9, "reason": "ok"})
     assert evaluators.faithfulness("答", "证") == {"score": 0.9, "variance": None, "reason": "ok"}
