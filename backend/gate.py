@@ -5,12 +5,36 @@
 门禁对象只挑 5 个 LLM judge 指标;recall(机械关键词)/ rejection(拒答率,非质量地板)不门禁。
 """
 
+# —— 门禁阈值(Ch28 校准,不是拍的)——
+#
+# 来源:`scripts/calibrate_gate.py` + `scripts/judge_ab.py`,被测系统 baby-ai
+#       (dataset 3,run 12/13/14 同配置重跑 + 换裁判重打)。
+#
+# **max_regression 的量法**:门禁比的是两次 run,而每次 run 都会重新生成回答、裁判也可能换。
+# 所以容忍度必须**大于「什么都没改时的自然波动」**,否则天天误报。实测三块噪声:
+#
+#   | 指标              | 生成随机 | 跨裁判 | 自复现 | 取用 |
+#   |-------------------|---------|--------|--------|------|
+#   | faithfulness      | 0.072   | 0.053  | ~0     | 生成侧主导 |
+#   | context_precision | 0.024   | 0.224  | 0.007  | 裁判主导 |
+#   | context_recall    | 0.000   | 0.313  | ~0     | 裁判主导 |
+#   | answer_relevance  | 0.134   | 0.022  | 0.002  | 生成侧主导 |
+#   | answer_correctness| 0.181   | 0.041  | 0.001  | 生成侧主导 |
+#
+# **下面取的是「裁判固定」那一列的 ×1.3 安全系数**——因为 EvalFlow 的裁判就是固定的
+# (chat_model 已写进 run 快照)。换裁判会让上下文侧指标的噪声涨 10 倍以上,那时必须重校。
+#
+# **min 的性质要说清**:它来自「健康系统的低位」,挡的是**比我平时差**(自我一致性),
+# 不是**质量不合格**。真正的质量下限需要人工标注「什么不可接受」——那是另一套工作。
+#
+# ⚠ **换被测系统必须重校**:这些值绑在 baby-ai 的实际水平上(faithfulness 基线只有 0.16)。
+#    换个系统直接套用,会得到「永远红灯」或「永远绿灯」。
 GATE_RULES: dict[str, dict[str, float]] = {
-    "faithfulness": {"min": 0.7, "max_regression": 0.05},
-    "context_precision": {"min": 0.7, "max_regression": 0.05},
-    "context_recall": {"min": 0.7, "max_regression": 0.05},
-    "answer_relevance": {"min": 0.7, "max_regression": 0.05},
-    "answer_correctness": {"min": 0.7, "max_regression": 0.05},
+    "faithfulness": {"min": 0.066, "max_regression": 0.094},
+    "context_precision": {"min": 0.354, "max_regression": 0.031},
+    "context_recall": {"min": 0.459, "max_regression": 0.020},
+    "answer_relevance": {"min": 0.394, "max_regression": 0.174},
+    "answer_correctness": {"min": 0.239, "max_regression": 0.235},
 }
 
 

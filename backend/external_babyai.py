@@ -11,6 +11,8 @@
 「这次比上次好」就说不清是「改了检索」还是「对方知识库/模型变了」——那只是一句话,不是结论。
 """
 import logging
+import threading
+import time
 from uuid import uuid4
 
 import requests
@@ -18,6 +20,28 @@ import requests
 from backend.config import settings
 
 logger = logging.getLogger(__name__)
+
+# —— 自我限流 ——
+# baby-ai 的 /api/chat 有 10/min 的限制(那是它对**所有调用方**的保护)。
+# 评测会并发打请求,不自我限速就会吃 429、整个 run 直接失败(实测踩过:20 条并发 2 → 进度 7 挂掉)。
+# 所以适配器的职责之一,是**尊重被测系统的限流**——这是「评测别人」应有的分寸。
+_throttle_lock = threading.Lock()
+_recent_calls: list[float] = []
+
+
+def _throttle() -> None:
+    """确保最近一分钟发出的请求数不超过 babyai_max_rpm;超了就等到窗口滑过去。"""
+    limit = max(1, settings.babyai_max_rpm)
+    with _throttle_lock:
+        now = time.monotonic()
+        _recent_calls[:] = [t for t in _recent_calls if now - t < 60]
+        if len(_recent_calls) >= limit:
+            wait = 60 - (now - _recent_calls[0]) + 0.3
+            logger.info("自我限流:等待 %.1fs(目标 %d 次/分)", wait, limit)
+            time.sleep(wait)
+            now = time.monotonic()
+            _recent_calls[:] = [t for t in _recent_calls if now - t < 60]
+        _recent_calls.append(now)
 
 
 def run_pipeline_babyai(question: str, top_k: int = 2, retrieval: str = "hybrid") -> dict:
@@ -28,12 +52,18 @@ def run_pipeline_babyai(question: str, top_k: int = 2, retrieval: str = "hybrid"
     被测系统的内部策略是黑盒,我们只量它最终给出的质量。
     """
     # 每次全新 session_id + 不带 history:避免题与题之间通过多轮记忆互相污染
-    r = requests.post(
-        f"{settings.babyai_base_url}/api/chat",
-        json={"message": question, "session_id": f"eval-{uuid4()}"},
-        timeout=settings.babyai_timeout,
-    )
-    r.raise_for_status()
+    payload = {"message": question, "session_id": f"eval-{uuid4()}"}
+    # 兜底重试:自我限流后仍偶发 429(比如别的调用方也在打),退避重试几次
+    for attempt in range(3):
+        _throttle()
+        r = requests.post(f"{settings.babyai_base_url}/api/chat", json=payload,
+                          timeout=settings.babyai_timeout)
+        if r.status_code == 429 and attempt < 2:
+            logger.warning("被测系统返回 429,退避重试(%d/3)", attempt + 1)
+            time.sleep(20 * (attempt + 1))
+            continue
+        r.raise_for_status()
+        break
     d = r.json()
 
     refs = d.get("references") or []

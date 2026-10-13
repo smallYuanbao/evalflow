@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     eval_target: str = "local"                      # local=自己的 toy pipeline;babyai=HTTP 调 baby-ai
     babyai_base_url: str = "http://localhost:3001"  # baby-ai 的 python-server 地址
     babyai_timeout: int = 120                       # baby-ai 单次问答超时(秒);它要跑检索+精排+生成,给足
+    babyai_max_rpm: int = 8                         # 自我限流:每分钟最多打多少次(被测系统是 10/min,留余量)
 
     model_config = {"env_file": ".env"}
 

@@ -62,15 +62,21 @@ def test_gate_null_metric_fails():
 
 
 def test_gate_regression_vs_baseline():
-    # 这次 0.85、基线 0.95:掉 0.10 > 容忍 0.05,即便绝对线过了也 FAIL
-    res = evaluate_gate({m: 0.85 for m in GATE_RULES}, {m: 0.95 for m in GATE_RULES})
+    # 掉幅**超过每个指标的容忍度** → 全部判「较基线下降超过容忍度」。
+    # 容忍度是按指标分档的(0.02~0.235),所以用 max+余量,不能写死 0.10——
+    # 写死的话 answer_correctness 那档(0.235)根本不会报警,测试就成了假的。
+    drop = max(r["max_regression"] for r in GATE_RULES.values()) + 0.05
+    base = {m: 0.95 for m in GATE_RULES}
+    res = evaluate_gate({m: 0.95 - drop for m in GATE_RULES}, base)
     assert res["passed"] is False
     assert all(c["note"] == "较基线下降超过容忍度" for c in res["checks"])
 
 
 def test_gate_ok_vs_baseline():
-    # 掉 0.02 < 容忍 0.05,且都过绝对线:过
-    res = evaluate_gate({m: 0.90 for m in GATE_RULES}, {m: 0.92 for m in GATE_RULES})
+    # 掉幅**小于每个指标的容忍度** → 都算噪声,不报回归
+    drop = min(r["max_regression"] for r in GATE_RULES.values()) - 0.01
+    base = {m: 0.95 for m in GATE_RULES}
+    res = evaluate_gate({m: 0.95 - drop for m in GATE_RULES}, base)
     assert res["passed"] is True
 
 

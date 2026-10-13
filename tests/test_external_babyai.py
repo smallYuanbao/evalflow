@@ -4,6 +4,8 @@ from backend import external_babyai, snapshot
 
 def test_run_pipeline_babyai_assembles_output(monkeypatch):
     class _Resp:
+        status_code = 200   # 适配器会检查它来决定是否对 429 退避重试
+
         @staticmethod
         def raise_for_status(): pass
         @staticmethod
