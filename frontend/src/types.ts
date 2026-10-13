@@ -77,6 +77,7 @@ export interface RunDiffResult {
   run_a_id: number
   run_b_id: number
   different_datasets: boolean
+  comparability?: Comparability
   pairs: RunDiffPair[]
 }
 
@@ -104,6 +105,7 @@ export interface BucketAttributionResult {
   run_id: number
   baseline_run_id: number
   buckets: BucketAttribution[]
+  comparability?: Comparability
 }
 
 // 模型性价比对比(Ch19):按模型分组的分数 × 成本
@@ -136,11 +138,18 @@ export interface GateCheck {
   note: string | null
 }
 
+// 两次 run 的可比性(Ch29):是不是同一批题。null = 早期 run 没记录,无法判断
+export interface Comparability {
+  comparable: boolean | null
+  reason: string | null
+}
+
 export interface GateResult {
   passed: boolean
   checks: GateCheck[]
   run_id: number
   baseline_run_id: number | null
+  comparability?: Comparability | null
 }
 
 export interface KnowledgeChunk {

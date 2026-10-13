@@ -14,7 +14,7 @@ from backend.logging_config import setup_logging
 from backend.models import Dataset, DatasetItem, Run, Score, Trace, _now
 from backend.ratelimit import run_limiter
 from backend.snapshot import build_snapshot, config_retrieval, config_top_k
-from backend.stats import aggregate_run, run_export_csv_stream, runs_trend
+from backend.stats import aggregate_run, dataset_comparability, run_export_csv_stream, runs_trend
 from backend.gate import evaluate_gate
 from backend.calibration import calibration_report
 
@@ -300,6 +300,8 @@ def get_run_gate(run_id: int, baseline_run_id: int | None = None):
         **evaluate_gate(scores, baseline_scores),
         "run_id": run_id,
         "baseline_run_id": baseline_run_id,
+        # Ch29:结论成立的前提是「两边测的是同一批题」。不成立就说出来,别静默给个 PASS/FAIL。
+        "comparability": dataset_comparability(run_id, baseline_run_id) if baseline_run_id is not None else None,
     }
 
 
@@ -326,7 +328,12 @@ def bucket_attribution(run_id: int, baseline_run_id: int):
             if av is not None and bv is not None:
                 deltas[m] = round(av - bv, 4)
         buckets.append({"bucket": bucket, "count": a.get(bucket, {}).get("count"), "deltas": deltas})
-    return {"run_id": run_id, "baseline_run_id": baseline_run_id, "buckets": buckets}
+    return {
+        "run_id": run_id,
+        "baseline_run_id": baseline_run_id,
+        "buckets": buckets,
+        "comparability": dataset_comparability(run_id, baseline_run_id),
+    }
 
 
 @app.get("/runs/{run_a_id}/diff/{run_b_id}")
@@ -390,6 +397,8 @@ def diff_runs(run_a_id: int, run_b_id: int):
         "run_a_id": run_a_id,
         "run_b_id": run_b_id,
         "different_datasets": different,
+        # Ch29:比 dataset_id 更严——同一评测集被改过(加/删/改样本)也会让逐条对比失效
+        "comparability": dataset_comparability(run_a_id, run_b_id),
         "pairs": pairs,
     }
 

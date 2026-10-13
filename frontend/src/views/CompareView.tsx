@@ -3,6 +3,7 @@ import { Alert, Button, Card, Empty, Result, Skeleton, Table, Tag } from 'antd'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { api } from '../api'
 import { useRequest } from '../hooks/useRequest'
+import ComparabilityAlert from '../components/ComparabilityAlert'
 import { COMPARE_COLORS } from '../utils/compare'
 import type { RunDetail, RunDiffSide } from '../types'
 import { METRIC_LABELS } from '../utils/metrics'
@@ -129,13 +130,14 @@ export default function CompareView() {
 
       {ids.length === 2 ? (
         <Card title="逐条 Diff" style={{ marginTop: 16 }}>
-          {diff?.different_datasets && (
-            <Alert
-              type="warning"
-              showIcon
-              style={{ marginBottom: 12 }}
-              message="两次 run 不在同一评测集,逐条对比可能无意义"
-            />
+          {/* Ch29:比 dataset_id 更严——同一评测集被改过(加/删/改样本)也会让逐条对比失效 */}
+          {diff?.comparability ? (
+            <ComparabilityAlert value={diff.comparability} />
+          ) : (
+            diff?.different_datasets && (
+              <Alert type="warning" showIcon style={{ marginBottom: 12 }}
+                     message="两次 run 不在同一评测集,逐条对比可能无意义" />
+            )
           )}
           {diff?.pairs.length ? (
             diff.pairs.map((p) => (

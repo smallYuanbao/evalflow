@@ -1,3 +1,5 @@
+import json
+
 from backend.db import SessionLocal, init_db
 from backend.models import Dataset, DatasetItem, Generation, Run, Score, Trace
 from backend.stats import aggregate_run, run_export_csv_stream, runs_trend
@@ -206,3 +208,44 @@ def test_run_export_csv():
     assert row[5] == "0.9"
 
     # 不存在的 run:流式函数只产出表头(404 由端点负责,test_api 已覆盖)
+
+
+# —— Ch29:两次 run 可比性(同一批题吗) ——
+
+def _run_with_hash(dataset_id: int, cfg: dict) -> int:
+    init_db()
+    s = SessionLocal()
+    r = Run(dataset_id=dataset_id, status="done", config=json.dumps(cfg))
+    s.add(r)
+    s.commit()
+    rid = r.id
+    s.close()
+    return rid
+
+
+def test_dataset_comparability_same_hash():
+    from backend.stats import dataset_comparability
+    a = _run_with_hash(1, {"dataset_hash": "aaa", "item_count": 20})
+    b = _run_with_hash(1, {"dataset_hash": "aaa", "item_count": 20})
+    assert dataset_comparability(a, b) == {"comparable": True, "reason": None}
+
+
+def test_dataset_comparability_different_hash():
+    """评测集被改过(加/删/改样本)→ 分数不可直接比,要显式说出来。"""
+    from backend.stats import dataset_comparability
+    a = _run_with_hash(1, {"dataset_hash": "aaa", "item_count": 20})
+    b = _run_with_hash(1, {"dataset_hash": "bbb", "item_count": 21})
+    r = dataset_comparability(a, b)
+    assert r["comparable"] is False
+    assert "20 条 vs 21 条" in r["reason"]
+    assert "aaa" in r["reason"] and "bbb" in r["reason"]
+
+
+def test_dataset_comparability_unknown_for_old_runs():
+    """早期 run 快照里没有 hash → 显式说「不知道」,不假装能比。"""
+    from backend.stats import dataset_comparability
+    a = _run_with_hash(1, {"top_k": 2})
+    b = _run_with_hash(1, {"dataset_hash": "aaa"})
+    r = dataset_comparability(a, b)
+    assert r["comparable"] is None
+    assert "无法判断" in r["reason"]

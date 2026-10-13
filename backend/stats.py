@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 from collections import defaultdict
 
 from backend.db import SessionLocal
@@ -70,6 +71,47 @@ def aggregate_run(run_id: int) -> dict:
         "input_tokens": total_input,
         "output_tokens": total_output,
         "cost": round(total_cost, 6),
+    }
+
+
+def dataset_comparability(run_a_id: int, run_b_id: int) -> dict:
+    """两次 run 的评测集是不是「同一批题」——这是分数能不能直接比的前提(Ch29)。
+
+    `dataset_hash` 覆盖 (input, expected_output, bucket):任何一条样本增删改都会变,
+    所以它比手写的 version 号可靠(version 要靠人记得 bump,容易和实际漂移)。
+
+    拿两个不同版本的评测集算出的均值去比,**比的是两个不同的东西**——
+    门禁会报出「回归」,而它其实是「换了一批题」。
+
+    返回 comparable:
+      · True  —— hash 一致,可以比
+      · False —— 不一致(附题目数与 hash 前缀,便于定位)
+      · None  —— 至少一方是早期 run、快照里没有 hash → **显式说不知道,不假装能比**
+    """
+    s = SessionLocal()
+    runs = {r.id: r for r in s.query(Run).filter(Run.id.in_([run_a_id, run_b_id]))}
+    s.close()
+    a, b = runs.get(run_a_id), runs.get(run_b_id)
+    if a is None or b is None:
+        return {"comparable": None, "reason": "run 不存在"}
+
+    def _cfg(r: Run) -> dict:
+        try:
+            return json.loads(r.config or "{}")
+        except json.JSONDecodeError:
+            return {}
+
+    ca, cb = _cfg(a), _cfg(b)
+    ha, hb = ca.get("dataset_hash"), cb.get("dataset_hash")
+    if not ha or not hb:
+        return {"comparable": None,
+                "reason": "有一方是早期 run、快照里没有 dataset_hash,无法判断是不是同一批题"}
+    if ha == hb:
+        return {"comparable": True, "reason": None}
+    return {
+        "comparable": False,
+        "reason": (f"两次 run 的评测集不同({ca.get('item_count')} 条 vs {cb.get('item_count')} 条,"
+                   f"hash {ha[:8]} vs {hb[:8]}),分数不可直接比较"),
     }
 
 

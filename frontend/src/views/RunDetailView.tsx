@@ -6,6 +6,7 @@ import { exportRunCsvUrl } from '../api/client'
 import { useRequest } from '../hooks/useRequest'
 import { useRunCompletionNotice } from '../hooks/useRunCompletionNotice'
 import type { BucketAttribution, GateCheck, TraceRow } from '../types'
+import ComparabilityAlert from '../components/ComparabilityAlert'
 import MetricCard from '../components/MetricCard'
 import BucketChart from '../components/BucketChart'
 import { metricDesc, metricLabel, METRIC_LABELS } from '../utils/metrics'
@@ -214,6 +215,8 @@ export default function RunDetailView() {
           <Skeleton active paragraph={{ rows: 3 }} />
         ) : gate ? (
           <>
+            {/* Ch29:先说前提(是不是同一批题),再给结论 */}
+            <ComparabilityAlert value={gate.comparability} />
             <div style={{ marginBottom: 12 }}>
               <Tag color={gate.passed ? 'green' : 'red'} style={{ fontSize: 14, padding: '2px 10px' }}>
                 {gate.passed ? 'PASS 通过' : 'FAIL 不通过'}
@@ -247,6 +250,7 @@ export default function RunDetailView() {
       </Card>
       {bucketAttr && bucketAttr.buckets.length > 0 && (
         <Card title={`分桶归因(相对基线 Run #${bucketAttr.baseline_run_id})`} style={{ marginBottom: 16 }}>
+          <ComparabilityAlert value={bucketAttr.comparability} />
           <Table
             rowKey="bucket"
             size="small"
