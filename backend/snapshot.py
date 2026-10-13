@@ -40,6 +40,26 @@ def content_hash(items: list[dict]) -> str:
     return hashlib.md5(payload.encode("utf-8")).hexdigest()
 
 
+def _external_snapshot() -> dict:
+    """被测系统(外部)的状态(Ch26)。local 时只是个标记;外部系统要连过去取它的 meta。
+
+    **拿不到就显式标 meta_error,绝不用空值假装已知**——静默记空会让人误信
+    「这次结果可与历史对比」,比不记更危险。
+    """
+    if settings.eval_target != "babyai":
+        return {"target": settings.eval_target}
+
+    from backend.external_babyai import fetch_meta
+
+    meta = fetch_meta()
+    return {
+        "target": "babyai",
+        "base_url": settings.babyai_base_url,
+        "meta": meta,
+        "meta_error": None if meta else "拿不到被测系统状态(/api/meta 不可达),本次结果不可与历史对比",
+    }
+
+
 def build_snapshot(dataset_id: int, top_k: int, retrieval: str = "hybrid") -> dict:
     """组装 run 的复现上下文:用户配置 + 系统快照,一次性写进 Run.config。"""
     from backend.db import SessionLocal
@@ -54,6 +74,7 @@ def build_snapshot(dataset_id: int, top_k: int, retrieval: str = "hybrid") -> di
     return {
         "top_k": top_k,
         "retrieval": retrieval,  # Ch16:dense|hybrid,记录「这次用哪种检索跑出来的」
+        "external": _external_snapshot(),  # Ch26:被测系统(外部)的状态
         "knowledge_version": KNOWLEDGE_VERSION,
         "knowledge_hash": content_hash(KNOWLEDGE),
         "pipeline_prompt_version": PIPELINE_PROMPT_VERSION,

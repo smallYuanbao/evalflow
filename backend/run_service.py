@@ -31,6 +31,12 @@ if settings.e2e_mock:
 
     run_pipeline = mock_run_pipeline
     faithfulness = context_precision = context_recall = answer_relevance = answer_correctness = mock_judge
+elif settings.eval_target == "babyai":
+    # 被测系统换成真实 RAG 应用 baby-ai(Ch26):只换「取回答」这一步,
+    # judge 仍用 EvalFlow 自己的——评的是 baby-ai 的输出,不是把裁判也交出去。
+    from backend.external_babyai import run_pipeline_babyai
+
+    run_pipeline = run_pipeline_babyai
 
 
 def execute_run(run_id: int) -> None:

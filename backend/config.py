@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     chat_price_output_per_1m: float = 8.0 # 输出价(元/百万 token)。deepseek-chat 参考价,按官方实际调
     # —— Ch14 交付硬化 ——
     e2e_mock: bool = False  # E2E 开关:替换 run_pipeline/judge 为确定性假实现,并同步执行(不走 celery)
+    # —— Ch26 评测外部系统 ——
+    eval_target: str = "local"                      # local=自己的 toy pipeline;babyai=HTTP 调 baby-ai
+    babyai_base_url: str = "http://localhost:3001"  # baby-ai 的 python-server 地址
+    babyai_timeout: int = 120                       # baby-ai 单次问答超时(秒);它要跑检索+精排+生成,给足
 
     model_config = {"env_file": ".env"}
 

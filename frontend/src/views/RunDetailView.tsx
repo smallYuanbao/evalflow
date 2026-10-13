@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Button, Card, Descriptions, Result, Select, Skeleton, Space, Table, Tag, Tooltip, message } from 'antd'
+import { Alert, Button, Card, Descriptions, Result, Select, Skeleton, Space, Table, Tag, Tooltip, message } from 'antd'
 import { api } from '../api'
 import { exportRunCsvUrl } from '../api/client'
 import { useRequest } from '../hooks/useRequest'
@@ -25,6 +25,20 @@ type Snapshot = {
   embed_model?: string
   dataset_hash?: string
   item_count?: number
+  // Ch26:被测系统(外部)的状态
+  external?: {
+    target: string
+    base_url?: string
+    meta?: {
+      service?: string
+      commit?: string | null
+      model?: string
+      embed_model?: string
+      query_rewrite?: boolean
+      collections?: Record<string, number | null>
+    } | null
+    meta_error?: string | null
+  }
 }
 
 export default function RunDetailView() {
@@ -281,6 +295,38 @@ export default function RunDetailView() {
           <Descriptions.Item label="样本数">{cfg.item_count ?? '—'}</Descriptions.Item>
         </Descriptions>
       </Card>
+      {/* 被测系统(Ch26):评外部系统时,复现性有一半在对方那边——这里记下它的状态,
+          让「这次比上次好」有据可依。meta 拿不到时显式警示,而不是假装可复现。 */}
+      {cfg.external && cfg.external.target !== 'local' && (
+        <Card title="被测系统" style={{ marginBottom: 16 }}>
+          {cfg.external.meta_error ? (
+            <Alert
+              type="warning"
+              showIcon
+              message="被测系统状态未知"
+              description={`${cfg.external.meta_error}——本次结果**不可**与历史 run 对比。`}
+            />
+          ) : (
+            <Descriptions column={2} size="small">
+              <Descriptions.Item label="目标">{cfg.external.meta?.service ?? cfg.external.target}</Descriptions.Item>
+              <Descriptions.Item label="地址">{cfg.external.base_url ?? '—'}</Descriptions.Item>
+              <Descriptions.Item label="代码版本">{cfg.external.meta?.commit ?? '—'}</Descriptions.Item>
+              <Descriptions.Item label="生成模型">{cfg.external.meta?.model ?? '—'}</Descriptions.Item>
+              <Descriptions.Item label="嵌入模型">{cfg.external.meta?.embed_model ?? '—'}</Descriptions.Item>
+              <Descriptions.Item label="查询改写">
+                {cfg.external.meta?.query_rewrite == null ? '—' : cfg.external.meta.query_rewrite ? '开' : '关'}
+              </Descriptions.Item>
+              <Descriptions.Item label="知识库" span={2}>
+                {cfg.external.meta?.collections
+                  ? Object.entries(cfg.external.meta.collections)
+                      .map(([k, v]) => `${k}=${v ?? '不存在'}`)
+                      .join('  ')
+                  : '—'}
+              </Descriptions.Item>
+            </Descriptions>
+          )}
+        </Card>
+      )}
       <Card style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
           {metricKeys.map((k) => (
