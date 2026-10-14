@@ -36,14 +36,14 @@
 **面试要点(要能复述):**
 - 为什么 judge 温度 0——评分不能有温度,同一份证据+答案重放不能跳分。
 
-- [ ] **Step 1: 装 openai 包**
+**Step 1: 装 openai 包**
 
 ```bash
 cd /Users/lidong/Desktop/workFile/evalflow
 uv add openai
 ```
 
-- [ ] **Step 2: llm.py**
+**Step 2: llm.py**
 
 ```python
 import json
@@ -79,7 +79,7 @@ def chat_json(messages: list[dict], temperature: float = 0.0) -> dict | None:
         return None
 ```
 
-- [ ] **Step 3: prompts.py**
+**Step 3: prompts.py**
 
 ```python
 FAITHFULNESS_PROMPT = """你是 RAG 评测裁判,判断「回答」是否忠实于「证据」:回答里每个论断都要能在证据里找到依据,不编造、不夸大。
@@ -93,7 +93,7 @@ FAITHFULNESS_PROMPT = """你是 RAG 评测裁判,判断「回答」是否忠实�
 只输出 JSON,格式:{{"score": <0到1的浮点数>, "reason": "<一句话理由>"}}"""
 ```
 
-- [ ] **Step 4: 测试(mock 客户端,不调真实 LLM)**
+**Step 4: 测试(mock 客户端,不调真实 LLM)**
 
 `tests/test_llm.py`:
 
@@ -145,7 +145,7 @@ def test_chat_json_bad_json_returns_none(monkeypatch):
 **面试要点(要能复述):**
 - 为什么 Ch02 检索用最小实现(关键词匹配)——Ch02 重点是「跑通评测流程」,别把这一章变成 RAG 章节;真实向量检索后置。
 
-- [ ] **Step 1: knowledge.py**
+**Step 1: knowledge.py**
 
 ```python
 # 内存知识库(Ch02 最小检索源,真实向量检索 Ch03/Ch04)
@@ -160,7 +160,7 @@ KNOWLEDGE = [
 ]
 ```
 
-- [ ] **Step 2: retriever.py**
+**Step 2: retriever.py**
 
 ```python
 from backend.knowledge import KNOWLEDGE
@@ -177,7 +177,7 @@ def retrieve(query: str, top_k: int = 2) -> list[str]:
     return [text for _, text in scored[:top_k]]
 ```
 
-- [ ] **Step 3: pipeline.py 升级**
+**Step 3: pipeline.py 升级**
 
 ```python
 from backend import llm
@@ -195,7 +195,7 @@ def run_pipeline(question: str) -> dict:
     return {"output": output, "retrieved_context": context}
 ```
 
-- [ ] **Step 4: 测试**
+**Step 4: 测试**
 
 `tests/test_retriever.py`:
 
@@ -230,7 +230,7 @@ def test_retrieve_no_match_returns_empty():
 - recall 机械 vs faithfulness LLM——分层解耦,检索段确定性可复现,上游 LLM 挂了 recall 照样跑。
 - judge 挂返回 None(记 NULL)——「没评上」≠「零分」,失败样本不污染均值。
 
-- [ ] **Step 1: evaluators.py**
+**Step 1: evaluators.py**
 
 ```python
 from backend import llm
@@ -260,7 +260,7 @@ def faithfulness(output: str, retrieved_context: str) -> dict | None:
         return None
 ```
 
-- [ ] **Step 2: 测试(recall 确定性 + faithfulness 失败注入,不调真实 LLM)**
+**Step 2: 测试(recall 确定性 + faithfulness 失败注入,不调真实 LLM)**
 
 `tests/test_evaluators.py`:
 
@@ -299,7 +299,7 @@ def test_faithfulness_failure_returns_none(monkeypatch):
 **面试要点(要能复述):**
 - 单条 judge 挂只让该条 score 记 NULL,继续下一条,不算 run 失败;只有 run 级异常才 failed。
 
-- [ ] **Step 1: run_service.py**
+**Step 1: run_service.py**
 
 ```python
 import time
@@ -344,7 +344,7 @@ def execute_run(run_id: int) -> None:
         s.close()
 ```
 
-- [ ] **Step 2: 测试(mock 管线跑通状态机)**
+**Step 2: 测试(mock 管线跑通状态机)**
 
 `tests/test_run_service.py`:
 
@@ -416,7 +416,7 @@ def test_execute_run_failed(monkeypatch):
 - `POST /datasets`、`POST /datasets/{id}/items`、`GET /datasets`
 - `POST /runs`(BackgroundTasks 后台跑)、`GET /runs/{id}`(聚合)、`GET /runs/{id}/traces`(明细)
 
-- [ ] **Step 1: main.py 升级**
+**Step 1: main.py 升级**
 
 ```python
 from fastapi import BackgroundTasks, FastAPI
@@ -525,7 +525,7 @@ def list_traces(run_id: int):
     return out
 ```
 
-- [ ] **Step 2: seed.py 升级(只造评测集,移除 run/trace/score)**
+**Step 2: seed.py 升级(只造评测集,移除 run/trace/score)**
 
 Ch01 的 seed 里那段「插 run + 跑管线 + 插 trace/score」要删掉——因为 run_pipeline 已经是真 LLM 调用,seed 再跑会烧 key 还重复;run/trace/score 现在归 run 生命周期管。seed 只负责造评测集,且 expected_output 与 `knowledge.py` 措辞对齐(recall 是子串匹配):
 
@@ -557,7 +557,7 @@ if __name__ == "__main__":
     seed()
 ```
 
-- [ ] **Step 3: 测试(API,不调真实 LLM)**
+**Step 3: 测试(API,不调真实 LLM)**
 
 `tests/test_api.py`:
 
@@ -602,7 +602,7 @@ def test_health():
 
 **库外题暂不加:** 它需要第三个指标「拒答率」(库外 recall=0 是「正确拒答」不是「失败」),硬塞进 recall 会误导分桶,留作下一步。
 
-- [ ] **Step 1: stats.py(聚合 + 分桶)**
+**Step 1: stats.py(聚合 + 分桶)**
 
 ```python
 from collections import defaultdict
@@ -667,7 +667,7 @@ def aggregate_run(run_id: int) -> dict:
     }
 ```
 
-- [ ] **Step 2: get_run 委托 aggregate_run**
+**Step 2: get_run 委托 aggregate_run**
 
 `main.py` 里 `GET /runs/{id}` 原来的 N+1 聚合删掉,换成:
 
@@ -679,7 +679,7 @@ def get_run(run_id: int):
     return aggregate_run(run_id)
 ```
 
-- [ ] **Step 3: seed 补难样本**
+**Step 3: seed 补难样本**
 
 items 从 3 条扩到 5 条:
 
@@ -701,7 +701,7 @@ items 从 3 条扩到 5 条:
     ]
 ```
 
-- [ ] **Step 4: 测试 test_stats.py**
+**Step 4: 测试 test_stats.py**
 
 ```python
 from backend.db import SessionLocal, init_db
@@ -767,7 +767,7 @@ def test_aggregate_by_bucket():
 - 库外题靠 `bucket="库外"` 标记;run_service 看到该桶只评 rejection,跳过 recall/faithfulness(库外题没有 ground-truth 答案,recall 无意义)。
 - rejection 记 0/1(1=正确拒答),聚合即拒答率;只对库外题计算,不污染普通桶。
 
-- [ ] **Step 1: evaluators.py 加 rejected()**
+**Step 1: evaluators.py 加 rejected()**
 
 ```python
 REJECT_MARKERS = ["不清楚", "不知道", "无法回答", "无法提供", "没有相关", "没有证据", "无法给出"]
@@ -778,7 +778,7 @@ def rejected(output: str) -> float:
     return 1.0 if any(m in output for m in REJECT_MARKERS) else 0.0
 ```
 
-- [ ] **Step 2: run_service.py 库外分支**
+**Step 2: run_service.py 库外分支**
 
 ```python
 ABSENT_BUCKET = "库外"
@@ -789,16 +789,16 @@ else:
     # recall + faithfulness(原逻辑不变)
 ```
 
-- [ ] **Step 3: seed 补 2 条库外题**(expected_output 为空,只有 bucket="库外")
+**Step 3: seed 补 2 条库外题**(expected_output 为空,只有 bucket="库外")
 
 ```python
 DatasetItem(dataset_id=ds.id, input="宝宝拉肚子怎么办", expected_output="", bucket="库外"),
 DatasetItem(dataset_id=ds.id, input="宝宝长湿疹怎么护理", expected_output="", bucket="库外"),
 ```
 
-- [ ] **Step 4: stats.py 聚合加 rejection**(overall + by_bucket 各加 rejection_rate)
+**Step 4: stats.py 聚合加 rejection**(overall + by_bucket 各加 rejection_rate)
 
-- [ ] **Step 5: 测试**(rejected 命中/未命中、库外分支、rejection 聚合)
+**Step 5: 测试**(rejected 命中/未命中、库外分支、rejection 聚合)
 
 运行 `uv run pytest` 通过(21 passed)。
 

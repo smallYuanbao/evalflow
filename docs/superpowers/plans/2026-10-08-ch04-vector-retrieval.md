@@ -26,7 +26,7 @@
 - Modify: `pyproject.toml`(加 chromadb / numpy / requests)
 - Modify: `backend/config.py`(加 embed 配置)
 
-- [ ] **Step 1: 加依赖**
+**Step 1: 加依赖**
 
 ```bash
 cd /Users/lidong/Desktop/workFile/evalflow
@@ -34,7 +34,7 @@ cd /Users/lidong/Desktop/workFile/evalflow
 uv add chromadb numpy requests "onnxruntime==1.23.2"
 ```
 
-- [ ] **Step 2: config.py 加 embedding 配置**
+**Step 2: config.py 加 embedding 配置**
 
 ```python
 class Settings(BaseSettings):
@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     embed_model: str = "bge-m3"                     # 本机已下载
 ```
 
-- [ ] **Step 3: 启动 Ollama(实现/联调时需要)**
+**Step 3: 启动 Ollama(实现/联调时需要)**
 
 ```bash
 ollama serve   # 后台常驻;或确认已启动:ollama list 能连上
@@ -58,7 +58,7 @@ ollama serve   # 后台常驻;或确认已启动:ollama list 能连上
 **Files:**
 - Modify: `backend/knowledge.py`
 
-- [ ] **Step 1: 改写 KNOWLEDGE 为带 id/category 的 chunk 列表**
+**Step 1: 改写 KNOWLEDGE 为带 id/category 的 chunk 列表**
 
 ```python
 # 多分类育儿知识库(Ch04 扩充,供向量检索 + 散点图按 category 着色)
@@ -107,7 +107,7 @@ KNOWLEDGE = [
 - Modify: `backend/retriever.py`(关键词计数 → ChromaDB 向量检索)
 - Modify: `backend/pipeline.py`(返回检索命中 hits)
 
-- [ ] **Step 1: embedding.py(照 baby-ai 的 /api/embed)**
+**Step 1: embedding.py(照 baby-ai 的 /api/embed)**
 
 ```python
 import requests
@@ -126,7 +126,7 @@ def embed(texts: list[str]) -> list[list[float]]:
     return r.json()["embeddings"]
 ```
 
-- [ ] **Step 2: retriever.py(ChromaDB 向量检索)**
+**Step 2: retriever.py(ChromaDB 向量检索)**
 
 ```python
 import chromadb
@@ -169,7 +169,7 @@ def retrieve(query: str, top_k: int = 2) -> list[dict]:
     return [{"text": t, "score": round(1 - d, 4)} for t, d in zip(docs, dists)]
 ```
 
-- [ ] **Step 3: pipeline.py 返回 hits**
+**Step 3: pipeline.py 返回 hits**
 
 ```python
 def run_pipeline(question: str) -> dict:
@@ -190,7 +190,7 @@ def run_pipeline(question: str) -> dict:
 - Modify: `backend/run_service.py`(落 hits 到 trace)
 - Modify: `backend/db.py`(老库补列迁移)
 
-- [ ] **Step 1: models.py Trace 加列**
+**Step 1: models.py Trace 加列**
 
 ```python
 class Trace(Base):
@@ -199,7 +199,7 @@ class Trace(Base):
     retrieval_hits = Column(Text, default="[]")  # 检索命中 JSON:[{text, score, rank}]
 ```
 
-- [ ] **Step 2: db.py 迁移补 retrieval_hits**
+**Step 2: db.py 迁移补 retrieval_hits**
 
 ```python
 # 沿用 Ch03 的 _migrate:若 traces 表缺 retrieval_hits 就 ALTER 补上
@@ -210,7 +210,7 @@ def _migrate(engine) -> None:
             conn.execute(text("ALTER TABLE traces ADD COLUMN retrieval_hits VARCHAR DEFAULT '[]'"))
 ```
 
-- [ ] **Step 3: run_service.py 落 hits**
+**Step 3: run_service.py 落 hits**
 
 ```python
 import json
@@ -234,7 +234,7 @@ tr = Trace(run_id=run.id, dataset_item_id=it.id, input=it.input,
 - Create: `backend/pca.py`
 - Modify: `backend/main.py`(加 GET /knowledge/map + traces 补 retrieval_hits)
 
-- [ ] **Step 1: pca.py(numpy SVD 降到 2 维)**
+**Step 1: pca.py(numpy SVD 降到 2 维)**
 
 ```python
 import numpy as np
@@ -259,7 +259,7 @@ def project(vectors: list[list[float]], mean: np.ndarray, basis: np.ndarray) -> 
 
 > 关键:基底只由**知识块**拟合,query 只做投影——若把知识块 + query 一起 PCA,query 数量远多于知识块时(此处 70:23)会主导主方向,把知识块挤成一团、看不出分类聚类。
 
-- [ ] **Step 2: main.py 加 /knowledge/map**
+**Step 2: main.py 加 /knowledge/map**
 
 ```python
 @app.get("/knowledge/map")
@@ -289,7 +289,7 @@ def knowledge_map():
     return {"chunks": chunks, "queries": queries}
 ```
 
-- [ ] **Step 3: main.py traces 补 retrieval_hits(解析 JSON)**
+**Step 3: main.py traces 补 retrieval_hits(解析 JSON)**
 
 ```python
 # list_traces 里,每行 trace 增加:
@@ -309,7 +309,7 @@ def knowledge_map():
 - Modify: `src/App.tsx`(路由 + 菜单)
 - Modify: `src/views/RunDetailView.tsx`(证据列渲染 hits)
 
-- [ ] **Step 1: types.ts + api/index.ts**
+**Step 1: types.ts + api/index.ts**
 
 ```ts
 // types.ts
@@ -323,7 +323,7 @@ export interface TraceRow { ...; retrieval_hits?: { text: string; score: number;
 getKnowledgeMap: (signal?: AbortSignal) => request<KnowledgeMap>("/knowledge/map", { signal }),
 ```
 
-- [ ] **Step 2: EmbeddingScatter.tsx(recharts ScatterChart)**
+**Step 2: EmbeddingScatter.tsx(recharts ScatterChart)**
 
 ```tsx
 import { Empty } from "antd";
@@ -353,7 +353,7 @@ export default function EmbeddingScatter({ chunks, queries }: { chunks: Knowledg
 }
 ```
 
-- [ ] **Step 3: KnowledgeMapView.tsx**
+**Step 3: KnowledgeMapView.tsx**
 
 ```tsx
 import { Button, Result, Skeleton } from "antd";
@@ -369,7 +369,7 @@ export default function KnowledgeMapView() {
 }
 ```
 
-- [ ] **Step 4: App.tsx 加路由 + 菜单**
+**Step 4: App.tsx 加路由 + 菜单**
 
 ```tsx
 // 菜单加一项(选中态按 pathname 前缀判断):
@@ -378,7 +378,7 @@ export default function KnowledgeMapView() {
 <Route path="/knowledge" element={<KnowledgeMapView />} />
 ```
 
-- [ ] **Step 5: RunDetailView 证据列渲染 hits**
+**Step 5: RunDetailView 证据列渲染 hits**
 
 ```tsx
 // 「证据」列从 dataIndex="retrieved_context" 改为 render,展示命中的块 + 分数
@@ -399,7 +399,7 @@ export default function KnowledgeMapView() {
 - Modify: `tests/test_api.py` 或新增 `tests/test_retriever.py`、`tests/test_pca.py`
 - Create: `src/views/__tests__/KnowledgeMapView.test.tsx`
 
-- [ ] **Step 1: 后端测试(mock embed,不依赖 Ollama)**
+**Step 1: 后端测试(mock embed,不依赖 Ollama)**
 
 ```python
 # test_retriever.py —— 用 monkeypatch 把 embed 换成确定性假向量,测检索逻辑
@@ -420,7 +420,7 @@ def test_pca_projects_to_2d():
     assert len(pts) == 3 and all(len(p) == 2 for p in pts)
 ```
 
-- [ ] **Step 2: 前端 KnowledgeMapView 测试(mock api)**
+**Step 2: 前端 KnowledgeMapView 测试(mock api)**
 
 ```tsx
 import { render, screen, waitFor } from "@testing-library/react";

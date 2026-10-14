@@ -26,7 +26,7 @@
 - Modify: `backend/prompts.py`（4 个新 prompt）
 - Modify: `backend/evaluators.py`（抽 `_judge()` + 4 个新 judge 函数 + `faithfulness` 改走 `_judge`）
 
-- [ ] **Step 1: prompts.py 加 4 个 prompt（与 FAITHFULNESS_PROMPT 同款格式）**
+**Step 1: prompts.py 加 4 个 prompt（与 FAITHFULNESS_PROMPT 同款格式）**
 
 ```python
 CONTEXT_PRECISION_PROMPT = """你是 RAG 评测裁判,判断「证据」里有多少是真正相关、有助于回答问题的(噪声越少、精度越高)。
@@ -76,7 +76,7 @@ ANSWER_CORRECTNESS_PROMPT = """你是 RAG 评测裁判,判断「回答」与「�
 只输出 JSON,格式:{{"score": <0到1的浮点数>, "reason": "<一句话理由>"}}"""
 ```
 
-- [ ] **Step 2: evaluators.py 抽 `_judge()` + 4 个新 judge**
+**Step 2: evaluators.py 抽 `_judge()` + 4 个新 judge**
 
 ```python
 from backend import llm
@@ -153,7 +153,7 @@ def answer_correctness(question: str, expected_output: str, output: str) -> dict
 - Create: `backend/metrics.py`（`METRIC_ORDER`）
 - Modify: `backend/stats.py`（`aggregate_run` 按注册表动态遍历）
 
-- [ ] **Step 1: metrics.py 注册表**
+**Step 1: metrics.py 注册表**
 
 ```python
 # 指标注册表:指标 key 的展示顺序(检索 → 生成 → 库外)。
@@ -169,7 +169,7 @@ METRIC_ORDER = [
 ]
 ```
 
-- [ ] **Step 2: stats.py 动态聚合（不再硬编码指标名）**
+**Step 2: stats.py 动态聚合（不再硬编码指标名）**
 
 ```python
 from collections import defaultdict
@@ -241,7 +241,7 @@ def aggregate_run(run_id: int) -> dict:
 **Files:**
 - Modify: `backend/run_service.py`
 
-- [ ] **Step 1: 库内题从 2 指标扩到 6 指标（库外题不变）**
+**Step 1: 库内题从 2 指标扩到 6 指标（库外题不变）**
 
 ```python
 import json
@@ -323,7 +323,7 @@ def execute_run(run_id: int) -> None:
 - Modify: `tests/test_stats.py`（动态聚合多指标）
 - Modify: `tests/test_run_service.py`（库内 6 指标 / 库外 1 指标）
 
-- [ ] **Step 1: test_evaluators.py 补 judge 测试**
+**Step 1: test_evaluators.py 补 judge 测试**
 
 ```python
 def _judge_ok(raw):
@@ -365,14 +365,14 @@ def test_all_five_judges(monkeypatch):
     assert evaluators.answer_correctness("q", "e", "a")["score"] == 0.5
 ```
 
-- [ ] **Step 2: test_stats.py 动态聚合**
+**Step 2: test_stats.py 动态聚合**
 
 ```python
 # 造一个 run:1 条库内题(评 recall/faithfulness/context_precision) + 1 条库外题(评 rejection)
 # 断言:scores 含 recall/faithfulness/context_precision/rejection(按注册表顺序),库外桶 rejection=1.0、其余为 None
 ```
 
-- [ ] **Step 3: test_run_service.py 6 指标**
+**Step 3: test_run_service.py 6 指标**
 
 ```python
 # mock run_pipeline + 5 个 judge(monkeypatch evaluators 里的函数),断言库内题产生 6 个 Score、库外题产生 1 个 rejection
@@ -388,7 +388,7 @@ def test_all_five_judges(monkeypatch):
 - Modify: `frontend/src/types.ts`（`RunDetail.scores` / `by_bucket` 改动态 key）
 - Modify: `frontend/src/views/RunDetailView.tsx`（指标卡片 + 分桶表动态列）
 
-- [ ] **Step 1: types.ts 改动态 key**
+**Step 1: types.ts 改动态 key**
 
 ```ts
 export interface RunDetail {
@@ -398,7 +398,7 @@ export interface RunDetail {
 }
 ```
 
-- [ ] **Step 2: RunDetailView 动态渲染**
+**Step 2: RunDetailView 动态渲染**
 
 ```tsx
 // 指标 key → 中文标签(后端只认 key,展示文案放前端)
@@ -441,7 +441,7 @@ const bucketColumns = [
 **Files:**
 - Modify: `frontend/src/views/__tests__/RunDetailView.test.tsx`
 
-- [ ] **Step 1: mock 多指标 scores,断言动态渲染**
+**Step 1: mock 多指标 scores,断言动态渲染**
 
 ```tsx
 // getRun mock 返回 6 个指标的 scores,断言「上下文精度」「答案正确性」等标签渲染出来

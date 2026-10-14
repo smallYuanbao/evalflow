@@ -36,7 +36,7 @@
 - `backend/config.py`: pydantic-settings 的 `Settings`;字段 `database_url: str = "sqlite:///data/eval.db"`、`chat_model: str = ""`、`chat_base_url: str = ""`、`chat_api_key: str = ""`(这三项给空默认,第 2 章接 judge 才填);模块级单例 `settings = Settings()`。
 - `backend/main.py`: FastAPI app,`GET /health` 返回 `{"status": "ok"}`。
 
-- [ ] **Step 1: uv 初始化与依赖**
+**Step 1: uv 初始化与依赖**
 
 ```bash
 cd /Users/lidong/Desktop/workFile/evalflow
@@ -55,7 +55,7 @@ testpaths = ["tests"]
 pythonpath = ["."]
 ```
 
-- [ ] **Step 2: .gitignore 与 .env.example**
+**Step 2: .gitignore 与 .env.example**
 
 `.gitignore`:
 
@@ -77,7 +77,7 @@ CHAT_BASE_URL=
 CHAT_API_KEY=
 ```
 
-- [ ] **Step 3: config.py**
+**Step 3: config.py**
 
 `backend/config.py`:
 
@@ -97,7 +97,7 @@ class Settings(BaseSettings):
 settings = Settings()
 ```
 
-- [ ] **Step 4: main.py + /health**
+**Step 4: main.py + /health**
 
 `backend/main.py`:
 
@@ -112,7 +112,7 @@ async def health():
     return {"status": "ok"}
 ```
 
-- [ ] **Step 5: dev.sh**
+**Step 5: dev.sh**
 
 `scripts/dev.sh`:
 
@@ -125,7 +125,7 @@ uv run uvicorn backend.main:app --port 8000 --reload
 
 `chmod +x scripts/dev.sh`。
 
-- [ ] **Step 6: 测试**
+**Step 6: 测试**
 
 `tests/test_health.py`:
 
@@ -159,7 +159,7 @@ def test_health():
 - `scores.value` 为什么可空——区分「0 分」和「judge 挂了没评上」,失败样本不污染分数。
 - `runs.config` 为什么存 JSON 快照——对比「改提示词/换模型前后」需要每轮当时的配置。
 
-- [ ] **Step 1: db.py**
+**Step 1: db.py**
 
 ```python
 from pathlib import Path
@@ -204,7 +204,7 @@ def init_db() -> None:
     Base.metadata.create_all(engine)
 ```
 
-- [ ] **Step 2: models.py**
+**Step 2: models.py**
 
 ```python
 from sqlalchemy import Column, Float, ForeignKey, Integer, String, Text
@@ -275,7 +275,7 @@ class Score(Base):
     created_at = Column(String)
 ```
 
-- [ ] **Step 3: 测试**
+**Step 3: 测试**
 
 `tests/test_models.py`:
 
@@ -328,7 +328,7 @@ def test_foreign_key_enforced():
 **面试要点(要能复述):**
 - 为什么先 mock——先跑通「数据能存」这条流,别一上来卡在检索管线;签名固定,第 2 章只换实现不换调用方。
 
-- [ ] **Step 1: pipeline.py**
+**Step 1: pipeline.py**
 
 ```python
 def run_pipeline(question: str) -> dict:
@@ -339,7 +339,7 @@ def run_pipeline(question: str) -> dict:
     }
 ```
 
-- [ ] **Step 2: 测试**
+**Step 2: 测试**
 
 `tests/test_pipeline.py`:
 
@@ -366,7 +366,7 @@ def test_run_pipeline_shape():
 - `seed()`:插入 1 个 dataset + 3 条 item(带 bucket)+ 1 个 run + 2 条 trace + 几个 score(含一个 `value=None` 验证可空)。
 - 作为入口 `python -m backend.seed` 运行。
 
-- [ ] **Step 1: seed.py**
+**Step 1: seed.py**
 
 ```python
 from backend.db import SessionLocal, init_db
@@ -416,7 +416,7 @@ if __name__ == "__main__":
     seed()
 ```
 
-- [ ] **Step 2: 验证**
+**Step 2: 验证**
 
 ```bash
 uv run python -m backend.seed
