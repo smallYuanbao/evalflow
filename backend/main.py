@@ -17,6 +17,7 @@ from backend.snapshot import build_snapshot, config_retrieval, config_top_k
 from backend.stats import aggregate_run, dataset_comparability, run_export_csv_stream, runs_trend
 from backend.gate import evaluate_gate
 from backend.calibration import calibration_report
+from backend.dataset_check import validate_dataset
 
 
 @asynccontextmanager
@@ -134,6 +135,22 @@ def list_items(dataset_id: int):
     s.close()
     return [{"id": it.id, "input": it.input, "expected_output": it.expected_output,
              "bucket": it.bucket, "gold_scores": _parse_gold(it.gold_scores)} for it in items]
+
+
+@app.get("/datasets/{dataset_id}/validate")
+def validate_dataset_endpoint(dataset_id: int, run_id: int | None = None):
+    """评测集自检(Ch32):把「评测集写错了」这类静默失败挡在跑之前。
+
+    结构检查(总是做):空要点 / 空分桶 / 库外题带要点 / 问题重复 / 要点有空项。
+    证据检查(传 run_id 时做):拿该 run 实际检索到的证据比对要点——
+    全部要点都没命中是很强的信号:**要点措辞和知识库对不上**(而不是检索差)。
+    """
+    s = SessionLocal()
+    exists = s.get(Dataset, dataset_id) is not None
+    s.close()
+    if not exists:
+        raise HTTPException(status_code=404, detail="评测集不存在")
+    return validate_dataset(dataset_id, run_id)
 
 
 @app.put("/datasets/{dataset_id}/items/{item_id}/gold")

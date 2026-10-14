@@ -1,6 +1,6 @@
 // 类型化接口方法(不再手写 header,统一走 client)
 import { request } from './client'
-import type { BucketAttributionResult, CalibrationResult, Dataset, DatasetItem, DatasetPage, GateResult, KnowledgeMap, ModelComparison, Run, RunDetail, RunDiffResult, RunTrend, TraceRow } from '../types'
+import type { BucketAttributionResult, CalibrationResult, Dataset, DatasetItem, DatasetPage, DatasetValidation, GateResult, KnowledgeMap, ModelComparison, Run, RunDetail, RunDiffResult, RunTrend, TraceRow } from '../types'
 
 export const api = {
   // 读接口都收 signal(useRequest 用来打断上次请求);写接口一次性触发,不收
@@ -16,6 +16,7 @@ export const api = {
   listItems: (id: number, signal?: AbortSignal) =>
     request<DatasetItem[]>(`/datasets/${id}/items`, { signal }),
   getDataset: (id: number, signal?: AbortSignal) => request<Dataset>(`/datasets/${id}`, { signal }),
+  validateDataset: (id: number, signal?: AbortSignal) => request<DatasetValidation>(`/datasets/${id}/validate`, { signal }),
   addItem: (id: number, body: { input: string; expected_output: string; bucket: string }) =>
     request<DatasetItem>(`/datasets/${id}/items`, { method: 'POST', data: body }),
   setItemGold: (datasetId: number, itemId: number, goldScores: Record<string, number>) =>

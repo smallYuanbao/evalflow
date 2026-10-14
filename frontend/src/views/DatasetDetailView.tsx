@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Button, Card, Empty, Input, InputNumber, Modal, Result, Select, Skeleton, Space, Table, Tag, Tooltip, message } from 'antd'
+import { Alert, Button, Card, Empty, Input, InputNumber, Modal, Result, Select, Skeleton, Space, Table, Tag, Tooltip, message } from 'antd'
 import { api } from '../api'
 import { useRequest } from '../hooks/useRequest'
-import type { DatasetItem } from '../types'
+import type { DatasetItem, DatasetValidation } from '../types'
 
 // 分桶释义(Ch24):「库外」不只是分组标签——它决定这条样本评「拒答」还是评 recall+judge
 const BUCKET_DESC: Record<string, string> = {
@@ -30,6 +30,8 @@ export default function DatasetDetailView() {
   const { data: items, reload: reloadItems } = useRequest((s) => api.listItems(id, s), [id])
   const [item, setItem] = useState({ input: '', expected_output: '', bucket: '' })
   const [goldItem, setGoldItem] = useState<DatasetItem | null>(null)
+  const [checking, setChecking] = useState(false)
+  const [check, setCheck] = useState<DatasetValidation | null>(null)
   const [goldScores, setGoldScores] = useState<Record<string, number>>({})
 
   if (loading) return <Skeleton active paragraph={{ rows: 6 }} />
@@ -41,6 +43,19 @@ export default function DatasetDetailView() {
   // 问题必填、分桶必选:分桶为空会被当成「库内题」用 recall+judge 评,
   // 而库外题的正确行为是评「拒答」——分桶影响打分语义,不是可选的分组标签(Ch24)
   const canAdd = !!item.input.trim() && !!item.bucket
+
+  // 评测集自检(Ch32):跑之前先查——要点是不是逐字能在证据里命中、
+  // 分桶/要点有没有自相矛盾。写错了不会报错,只会让分数莫名偏低。
+  const runCheck = async () => {
+    setChecking(true)
+    try {
+      setCheck(await api.validateDataset(id))
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : '自检失败')
+    } finally {
+      setChecking(false)
+    }
+  }
 
   const add = async () => {
     if (!canAdd) return
@@ -75,7 +90,12 @@ export default function DatasetDetailView() {
 
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="large">
-      <Button onClick={() => nav('/datasets')}>← 返回评测集</Button>
+      <Space>
+        <Button onClick={() => nav('/datasets')}>← 返回评测集</Button>
+        <Tooltip title="跑评测前先查评测集本身:要点是否能逐字命中、分桶/要点有没有自相矛盾。写错了不会报错,只会让分数莫名偏低。">
+          <Button onClick={runCheck} loading={checking}>评测集自检</Button>
+        </Tooltip>
+      </Space>
       <h2>{ds?.name ?? `评测集 #${id}`}</h2>
       {/* 两行布局(Ch23):问题用多行输入框——单行输入长问题会水平滚动,看不到前面写了什么。
           换行才解决可见性(限长不解决);期望要点/分桶内容短,保持单行避免整块过高。
@@ -175,6 +195,30 @@ export default function DatasetDetailView() {
           ]}
         />
       )}
+      <Modal open={check != null} title="评测集自检结果" footer={null} onCancel={() => setCheck(null)}>
+        {check && (
+          <>
+            <p style={{ color: '#888' }}>
+              {check.item_count} 条样本 · 错误 <b style={{ color: '#cf1322' }}>{check.summary.errors}</b> ·
+              警告 <b style={{ color: '#d48806' }}>{check.summary.warnings}</b>
+            </p>
+            {check.issues.length === 0 ? (
+              <Alert type="success" showIcon message="没发现问题" />
+            ) : (
+              check.issues.map((it, i) => (
+                <Alert
+                  key={i}
+                  style={{ marginBottom: 8 }}
+                  type={it.level === 'error' ? 'error' : it.level === 'warning' ? 'warning' : 'info'}
+                  showIcon
+                  message={it.item_id ? `item ${it.item_id}` : it.rule}
+                  description={it.detail}
+                />
+              ))
+            )}
+          </>
+        )}
+      </Modal>
       <Modal
         open={goldItem != null}
         title={`标金标准 — ${goldItem?.input ?? ''}`}

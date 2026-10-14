@@ -173,3 +173,19 @@ export interface KnowledgeMap {
   chunks: KnowledgeChunk[]
   queries: KnowledgeQuery[]
 }
+
+// 评测集自检(Ch32):把「评测集写错了」这类静默失败挡在跑之前
+export interface DatasetIssue {
+  level: 'error' | 'warning' | 'info'
+  rule: string
+  item_id: number | null
+  detail: string
+}
+
+export interface DatasetValidation {
+  dataset_id: number
+  run_id: number | null
+  item_count: number
+  summary: { errors: number; warnings: number; total: number }
+  issues: DatasetIssue[]
+}
