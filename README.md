@@ -99,8 +99,7 @@ EVAL_TARGET=babyai BABYAI_BASE_URL=http://localhost:3001 uv run uvicorn backend.
 |---|---|
 | **[docs/RETROSPECTIVE.md](docs/RETROSPECTIVE.md)** | **复盘与面试叙事**——先看这个 |
 | [docs/pitfalls/](docs/pitfalls/index.md) | 16 份踩坑记录，按「现象 → 根因 → 修法 → 原理」 |
-| [docs/superpowers/specs/](docs/superpowers/specs/) | 各章设计文档(决策 + 取舍) |
-| [docs/superpowers/plans/](docs/superpowers/plans/) | 各章实施计划(Task 列表) |
+| [docs/superpowers/](docs/superpowers/index.md) | 各章设计文档与实施计划(**按性质分组**的索引:功能设计 / 缺陷修复 / 测量校准) |
 
 > **关于这套文档结构**:每章都是「先写 spec(决策 + 为什么)→ 再写 plan(Task 清单)→ 实施 →
 > 同步回文档」。这是我做所有项目的固定流程，`docs/superpowers/` 就是它的产物。
