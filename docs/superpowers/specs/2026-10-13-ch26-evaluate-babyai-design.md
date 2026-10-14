@@ -21,7 +21,7 @@ EvalFlow 现在评的是自己那套 23 条 chunk 的玩具管道——「自己
 baby-ai 的 `POST /api/chat` 返回:
 
 ```python
-ChatResponse(answer=..., references=[{id, text}, ...])
+ChatResponse(answer=..., references=[{id, text, score}, ...])
 ```
 
 | EvalFlow 需要 | baby-ai 提供 | |
@@ -31,6 +31,11 @@ ChatResponse(answer=..., references=[{id, text}, ...])
 | 鉴权 | **宽松模式**,不带 token 即匿名用户 | ✅ 直接可调 |
 
 `hit@k`/`MRR` 只用 text + 顺序,不需要分数 ✅(`retrieval_hits` 的 score 填占位值)。
+
+> **2026-10-14 更新**:baby-ai 精排阶段算出的相关性分数原先在构造 `Reference`
+> 时被丢掉,现已透出为 `references[].score`(0~1,精排缺席时为 `null`)。
+> 对 EvalFlow **是纯增量**——`hit@k`/`MRR` 的取数方式不变,仍按 text + 顺序;
+> 但若后续想让 `retrieval_hits` 用真实分数而不是占位值,现在有得取了。
 
 **但 `/api/health` 只返回 `{status, uptime, timestamp}`——没有任何配置信息。**
 
