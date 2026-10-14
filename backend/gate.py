@@ -38,21 +38,48 @@ GATE_RULES: dict[str, dict[str, float]] = {
 }
 
 
+# 覆盖率下限:该指标实际评上的样本占比低于它就**不给判定**。
+# 理由:20 条里挂了 17 条 judge,均值只由剩下 3 条算出来——那是个「看起来正常」的数字,
+# 却基于 15% 的样本。门禁宁可说「样本不足」,也不该拿它去和基线比。
+MIN_COVERAGE = 0.8
+
+
 def evaluate_gate(
     scores: dict[str, float | None],
     baseline_scores: dict[str, float | None] | None = None,
+    coverage: dict[str, dict[str, int]] | None = None,
 ) -> dict:
     """对聚合后的 per-metric 均值做门禁判定。
 
-    scores: 被门禁 run 的 {metric: avg|null};baseline_scores: 基线 run 同结构(可选)。
+    scores: 被门禁 run 的 {metric: avg|null};baseline_scores: 基线 run 同结构(可选);
+    coverage: {metric: {scored, attempted}}(可选,来自 aggregate_run 的 score_coverage)。
     返回 {passed, checks};checks 逐指标带当前值/阈值/基线值/变化/通过与否/备注。
-    null 指标(judge 挂)记未评且不通过——门禁的门槛是「每个被门禁指标都评上且达标」。
+
+    不通过有三种原因,分清楚很重要:
+      · 未评     —— 一条都没评上
+      · 样本不足 —— 评上的比例低于 MIN_COVERAGE(均值不可信)
+      · 低于阈值 / 较基线下降 —— 真的质量信号
     """
     checks = []
     for metric, rule in GATE_RULES.items():
         value = scores.get(metric)
         threshold = rule["min"]
         tolerance = rule["max_regression"]
+
+        cov = (coverage or {}).get(metric)
+        if cov and cov.get("attempted"):
+            ratio = cov["scored"] / cov["attempted"]
+            if ratio < MIN_COVERAGE:
+                checks.append({
+                    "metric": metric,
+                    "value": value,
+                    "threshold": threshold,
+                    "baseline_value": (baseline_scores or {}).get(metric),
+                    "delta": None,
+                    "passed": False,
+                    "note": f"样本不足({cov['scored']}/{cov['attempted']} 评上,均值不可信)",
+                })
+                continue
 
         baseline_value = None
         delta = None

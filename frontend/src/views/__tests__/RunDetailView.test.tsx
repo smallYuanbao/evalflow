@@ -91,6 +91,7 @@ test('展示复现上下文快照(Ch09)', async () => {
       pipeline_prompt_version: 'v1',
       judge_prompt_version: 'v1',
       chat_model: 'deepseek-chat',
+      judge_model: 'qwen-max',   // Ch30:裁判可以和生成不同,快照要分别记
       embed_model: 'bge-m3',
       dataset_hash: '9876fedc5432',
       item_count: 7,
@@ -110,7 +111,9 @@ test('展示复现上下文快照(Ch09)', async () => {
   expect(screen.getByText('知识库版本')).toBeInTheDocument()
   expect(screen.getByText('Pipeline Prompt 版本')).toBeInTheDocument()
   expect(screen.getByText('Judge Prompt 版本')).toBeInTheDocument()
-  expect(screen.getByText('deepseek-chat')).toBeInTheDocument()
+  expect(screen.getByText('deepseek-chat')).toBeInTheDocument()  // 生成模型
+  expect(screen.getByText('qwen-max')).toBeInTheDocument()       // 裁判模型(独立配置)
+  expect(screen.getByText('裁判模型')).toBeInTheDocument()
   expect(screen.getByText('abcd1234')).toBeInTheDocument() // 知识库哈希截断前 8 位
 })
 

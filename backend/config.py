@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     babyai_base_url: str = "http://localhost:3001"  # baby-ai 的 python-server 地址
     babyai_timeout: int = 120                       # baby-ai 单次问答超时(秒);它要跑检索+精排+生成,给足
     babyai_max_rpm: int = 8                         # 自我限流:每分钟最多打多少次(被测系统是 10/min,留余量)
+    # —— Ch30 裁判独立配置 ——
+    # 留空 = 回退到 CHAT_*(兼容旧行为)。**单独配裁判是为了能做 A/B 和交叉验证**:
+    # Ch28 实测「换裁判让 context_recall 差 0.31,而门禁容忍度只有 0.05」——
+    # 裁判模型本身就是个变量,必须能单独换、并且记进快照。
+    judge_base_url: str = ""
+    judge_api_key: str = ""
+    judge_model: str = ""
 
     model_config = {"env_file": ".env"}
 

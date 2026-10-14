@@ -104,3 +104,30 @@ def test_gate_endpoint_baseline_404():
     good = _make_run({m: 0.85 for m in GATE_RULES})
     r = client.get(f"/runs/{good}/gate", params={"baseline_run_id": 999999})
     assert r.status_code == 404
+
+
+# —— Ch31:覆盖率 ——
+
+def test_gate_low_coverage_refuses_to_judge():
+    """样本不足时不给判定。
+
+    20 条里挂了 17 条 judge,均值只由剩下 3 条算出——那是个「看起来正常」的数字,
+    却基于 15% 的样本。宁可说「样本不足」,也不该拿它去和基线比。
+    """
+    scores = {m: 0.95 for m in GATE_RULES}          # 分数看着很漂亮
+    coverage = {m: {"scored": 3, "attempted": 20} for m in GATE_RULES}
+    res = evaluate_gate(scores, None, coverage)
+    assert res["passed"] is False
+    assert all("样本不足" in (c["note"] or "") for c in res["checks"])
+
+
+def test_gate_ok_coverage_still_judges():
+    """覆盖率达标时照常判定 —— 别把正常情况也拦了。"""
+    scores = {m: 0.95 for m in GATE_RULES}
+    coverage = {m: {"scored": 19, "attempted": 20} for m in GATE_RULES}
+    assert evaluate_gate(scores, None, coverage)["passed"] is True
+
+
+def test_gate_without_coverage_keeps_old_behavior():
+    """不传 coverage 时行为不变(兼容老调用方与既有测试)。"""
+    assert evaluate_gate({m: 0.95 for m in GATE_RULES})["passed"] is True

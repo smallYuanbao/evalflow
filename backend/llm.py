@@ -19,6 +19,16 @@ logger = logging.getLogger(__name__)
 _client = OpenAI(api_key=settings.chat_api_key, base_url=settings.chat_base_url,
                  timeout=settings.chat_timeout)
 
+# 裁判可以单独指向另一个模型/供应商(Ch30):留空就回退到上面那套,行为不变。
+# 为什么要分开:Ch28 实测「换个裁判,context_recall 差 0.31,而门禁容忍度只有 0.05」——
+# 裁判模型是测量仪器,必须能单独换(做 A/B),也必须能单独记(写进快照)。
+_judge_client = OpenAI(
+    api_key=settings.judge_api_key or settings.chat_api_key,
+    base_url=settings.judge_base_url or settings.chat_base_url,
+    timeout=settings.chat_timeout,
+)
+JUDGE_MODEL = settings.judge_model or settings.chat_model
+
 # 可重试异常:网络层(超时/连接)+ 服务端瞬时(429 限流 / 5xx)。
 # 4xx(鉴权/参数错)不重试——重试一万次也没用。
 _RETRYABLE = (APITimeoutError, APIConnectionError, RateLimitError, InternalServerError)
@@ -111,13 +121,18 @@ def _backoff(attempt: int) -> float:
     return settings.chat_retry_base * (2 ** attempt) + random.uniform(0, settings.chat_retry_base)
 
 
-def _create_with_retry(**kwargs):
-    """统一 LLM 调用出口:过熔断闸门 + 可重试错误的指数退避重试。"""
+def _create_with_retry(client: OpenAI, **kwargs):
+    """统一 LLM 调用出口:过熔断闸门 + 可重试错误的指数退避重试。
+
+    client 由调用方传(生成用 _client,裁判用 _judge_client)。
+    注:熔断器是模块级单例,两个供应商共用一个 —— 一个挂了会连带影响另一个。
+    demo 量级可接受;真要分开,得按 client 建各自的熔断器。
+    """
     last_exc = None
     for attempt in range(settings.chat_retries + 1):
         _circuit.before_call()  # open 直接抛 CircuitOpenError(快速失败,不打 LLM)
         try:
-            r = _client.chat.completions.create(**kwargs)
+            r = client.chat.completions.create(**kwargs)
             _circuit.on_success()
             _add_usage(r)  # 记 token(Ch12 费用统计)
             return r
@@ -136,7 +151,9 @@ def _create_with_retry(**kwargs):
 
 
 def chat(messages: list[dict], temperature: float = 0.0) -> str:
+    """生成侧(被测 pipeline 的回答)—— 走 _client。"""
     r = _create_with_retry(
+        _client,
         model=settings.chat_model,
         messages=messages,
         temperature=temperature,
@@ -145,9 +162,14 @@ def chat(messages: list[dict], temperature: float = 0.0) -> str:
 
 
 def chat_json(messages: list[dict], temperature: float = 0.0) -> dict | None:
-    """JSON mode 强制输出 JSON;解析失败返回 None(调用方按失败处理)。"""
+    """裁判侧(LLM-as-Judge)—— 走 _judge_client。
+
+    **这个是测量仪器,不是被测对象**:它和生成可以指向不同的模型。
+    JSON mode 强制输出 JSON;解析失败返回 None(调用方按失败处理)。
+    """
     r = _create_with_retry(
-        model=settings.chat_model,
+        _judge_client,
+        model=JUDGE_MODEL,
         messages=messages,
         temperature=temperature,
         response_format={"type": "json_object"},

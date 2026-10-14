@@ -80,6 +80,9 @@ def build_snapshot(dataset_id: int, top_k: int, retrieval: str = "hybrid") -> di
         "pipeline_prompt_version": PIPELINE_PROMPT_VERSION,
         "judge_prompt_version": JUDGE_PROMPTS_VERSION,
         "chat_model": settings.chat_model,
+        # Ch30:裁判也是「仪器」的一部分。换裁判 = 换尺子,历史对比就不成立了——
+        # 所以必须和知识库/prompt 版本一样记进快照(Ch28 实测换裁判能让指标动 0.31)。
+        "judge_model": settings.judge_model or settings.chat_model,
         "embed_model": settings.embed_model,
         "dataset_hash": content_hash(items),
         "item_count": len(items),

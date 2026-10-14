@@ -294,10 +294,11 @@ def get_run_gate(run_id: int, baseline_run_id: int | None = None):
     if not baseline_exists:
         raise HTTPException(status_code=404, detail="基线 run 不存在")
 
-    scores = aggregate_run(run_id)["scores"]
+    agg = aggregate_run(run_id)
+    scores = agg["scores"]
     baseline_scores = aggregate_run(baseline_run_id)["scores"] if baseline_run_id is not None else None
     return {
-        **evaluate_gate(scores, baseline_scores),
+        **evaluate_gate(scores, baseline_scores, agg.get("score_coverage")),
         "run_id": run_id,
         "baseline_run_id": baseline_run_id,
         # Ch29:结论成立的前提是「两边测的是同一批题」。不成立就说出来,别静默给个 PASS/FAIL。

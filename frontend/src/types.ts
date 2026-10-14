@@ -39,6 +39,8 @@ export interface RunDetail {
   progress?: number // 已完成样本数(Ch10 进度)
   item_count: number
   scores: Record<string, number | null> // 指标 key → 均值(动态)
+  // Ch31:每个指标的覆盖率(均值基于几条算出来的)
+  score_coverage?: Record<string, { scored: number; attempted: number }>
   by_bucket: Record<string, BucketStat>
   // Ch12 费用统计(可选:老 run 无此字段)
   input_tokens?: number

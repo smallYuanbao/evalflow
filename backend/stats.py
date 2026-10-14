@@ -67,6 +67,20 @@ def aggregate_run(run_id: int) -> dict:
         "progress": run.progress,
         "item_count": len(traces),
         "scores": {m: _avg(overall[m]) for m in ordered},
+        # Ch31:每个指标的**覆盖率**——均值基于几条算出来的。
+        # judge 失败会写一条 value=NULL 的 Score(不是不写),所以:
+        #   attempted = 有该指标行的 trace 数(应该评几条)
+        #   scored    = 其中真的评上的(非 NULL)
+        # 为什么必须露出:20 条里挂了 17 条 judge 时,均值只由剩下 3 条算出来,
+        # 而挂掉的往往是最难/最长的样本 → 均值会系统性偏高。界面只显示 0.9,
+        # 看不出它其实只基于 15% 的样本——比「没有分数」更容易误导。
+        "score_coverage": {
+            m: {
+                "scored": len(overall[m]),
+                "attempted": sum(1 for tr in traces if m in score_by_trace.get(tr.id, {})),
+            }
+            for m in ordered
+        },
         "by_bucket": by_bucket,
         "input_tokens": total_input,
         "output_tokens": total_output,

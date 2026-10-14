@@ -23,6 +23,7 @@ type Snapshot = {
   pipeline_prompt_version?: string  // Ch19:生成 prompt 版本
   judge_prompt_version?: string     // Ch19:judge prompt 版本
   chat_model?: string
+  judge_model?: string  // Ch30:裁判模型(测量仪器,和生成可以不同)
   embed_model?: string
   dataset_hash?: string
   item_count?: number
@@ -294,6 +295,13 @@ export default function RunDetailView() {
           <Descriptions.Item label="Pipeline Prompt 版本">{cfg.pipeline_prompt_version ?? '—'}</Descriptions.Item>
           <Descriptions.Item label="Judge Prompt 版本">{cfg.judge_prompt_version ?? '—'}</Descriptions.Item>
           <Descriptions.Item label="生成模型">{cfg.chat_model || '—'}</Descriptions.Item>
+          <Descriptions.Item label="裁判模型">
+            <Tooltip title="打分用的模型(LLM-as-Judge)。它和生成模型可以不同;换裁判等于换尺子,历史分数不再可比。">
+              <span style={{ cursor: 'help', borderBottom: '1px dashed #d9d9d9' }}>
+                {cfg.judge_model || cfg.chat_model || '—'}
+              </span>
+            </Tooltip>
+          </Descriptions.Item>
           <Descriptions.Item label="Embedding 模型">{cfg.embed_model || '—'}</Descriptions.Item>
           <Descriptions.Item label="数据集哈希">{short(cfg.dataset_hash)}</Descriptions.Item>
           <Descriptions.Item label="样本数">{cfg.item_count ?? '—'}</Descriptions.Item>
@@ -334,7 +342,8 @@ export default function RunDetailView() {
       <Card style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
           {metricKeys.map((k) => (
-            <MetricCard key={k} label={metricLabel(k)} value={run.scores[k]} desc={metricDesc(k)} />
+            <MetricCard key={k} label={metricLabel(k)} value={run.scores[k]}
+              desc={metricDesc(k)} coverage={run.score_coverage?.[k]} />
           ))}
         </div>
       </Card>

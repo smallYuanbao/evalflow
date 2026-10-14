@@ -23,7 +23,7 @@ def _fake_resp_with_usage(content: str, prompt: int = 100, completion: int = 50)
 
 def test_chat_json_parses(monkeypatch):
     monkeypatch.setattr(
-        llm._client.chat.completions, "create",
+        llm._judge_client.chat.completions, "create",
         lambda **kw: _fake_resp('{"score": 0.8, "reason": "ok"}'),
     )
     assert llm.chat_json([{"role": "user", "content": "x"}]) == {"score": 0.8, "reason": "ok"}
@@ -31,7 +31,7 @@ def test_chat_json_parses(monkeypatch):
 
 def test_chat_json_bad_json_returns_none(monkeypatch):
     monkeypatch.setattr(
-        llm._client.chat.completions, "create",
+        llm._judge_client.chat.completions, "create",
         lambda **kw: _fake_resp("不是 json"),
     )
     assert llm.chat_json([{"role": "user", "content": "x"}]) is None
@@ -50,7 +50,7 @@ def test_retry_then_success(monkeypatch):
             raise openai.APITimeoutError("超时")
         return _fake_resp('{"score": 0.8, "reason": "ok"}')
 
-    monkeypatch.setattr(llm._client.chat.completions, "create", fake_create)
+    monkeypatch.setattr(llm._judge_client.chat.completions, "create", fake_create)
     assert llm.chat_json([{"role": "user", "content": "x"}]) == {"score": 0.8, "reason": "ok"}
     assert calls["n"] == 2  # 第一次超时,重试成功
 
@@ -140,3 +140,40 @@ def test_compute_cost():
     assert llm.compute_cost(1_000_000, 0) == settings.chat_price_input_per_1m
     assert llm.compute_cost(0, 1_000_000) == settings.chat_price_output_per_1m
     assert llm.compute_cost(0, 0) == 0.0
+
+
+# —— Ch30:裁判可独立配置 ——
+
+def test_judge_model_falls_back_to_chat_model(monkeypatch):
+    """judge_model 留空时回退到 chat_model —— 保持旧行为,不配就等于没这功能。"""
+    from backend import llm
+    monkeypatch.setattr(llm.settings, "judge_model", "")
+    monkeypatch.setattr(llm.settings, "chat_model", "some-chat-model")
+    assert (llm.settings.judge_model or llm.settings.chat_model) == "some-chat-model"
+
+
+def test_chat_json_uses_judge_client(monkeypatch):
+    """裁判走独立客户端:换裁判不该连生成一起换掉(否则 A/B 做不了)。"""
+    from backend import llm
+    used = {}
+
+    class _FakeJudge:
+        class chat:
+            class completions:
+                @staticmethod
+                def create(**kw):
+                    used["client"] = "judge"
+                    used["model"] = kw["model"]
+
+                    class _R:
+                        class choices:
+                            @staticmethod
+                            def __iter__():
+                                return iter([])
+                    return type("R", (), {"choices": [type("C", (), {"message": type("M", (), {"content": '{"score": 1}'})()})()]})
+
+    monkeypatch.setattr(llm, "_judge_client", _FakeJudge)
+    monkeypatch.setattr(llm, "JUDGE_MODEL", "judge-model-x")
+    llm.chat_json([{"role": "user", "content": "x"}])
+    assert used["client"] == "judge"
+    assert used["model"] == "judge-model-x"   # 用的是裁判模型,不是 chat_model

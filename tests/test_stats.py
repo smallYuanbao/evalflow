@@ -249,3 +249,33 @@ def test_dataset_comparability_unknown_for_old_runs():
     r = dataset_comparability(a, b)
     assert r["comparable"] is None
     assert "无法判断" in r["reason"]
+
+
+def test_aggregate_run_reports_score_coverage():
+    """Ch31:均值必须带上「基于几条算的」——judge 失败写 NULL 行,所以两边都数得出来。"""
+    init_db()
+    s = SessionLocal()
+    ds = Dataset(name="cov", description="")
+    s.add(ds)
+    s.flush()
+    i1 = DatasetItem(dataset_id=ds.id, input="q1", expected_output="a", bucket="护理")
+    i2 = DatasetItem(dataset_id=ds.id, input="q2", expected_output="a", bucket="护理")
+    s.add_all([i1, i2])
+    s.flush()
+    run = Run(dataset_id=ds.id, status="done", config="{}")
+    s.add(run)
+    s.flush()
+    t1 = Trace(run_id=run.id, dataset_item_id=i1.id, input="q1", output="o", retrieved_context="c")
+    t2 = Trace(run_id=run.id, dataset_item_id=i2.id, input="q2", output="o", retrieved_context="c")
+    s.add_all([t1, t2])
+    s.flush()
+    s.add_all([
+        Score(trace_id=t1.id, name="faithfulness", value=0.9),
+        Score(trace_id=t2.id, name="faithfulness", value=None, comment="judge 失败"),  # 挂了也写行
+    ])
+    s.commit()
+    rid = run.id
+    s.close()
+
+    cov = aggregate_run(rid)["score_coverage"]["faithfulness"]
+    assert cov == {"scored": 1, "attempted": 2}   # 应该评 2 条,实际只评上 1 条
