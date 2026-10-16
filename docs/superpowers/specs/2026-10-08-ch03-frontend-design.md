@@ -30,7 +30,7 @@ Ch03 把 Ch02 的评测能力做成可视化平台:浏览器里建评测集、�
    │  react-router 四路由
    │  CORS
    ▼
-FastAPI @8000
+FastAPI @8002
    ├─ GET  /datasets ─────────── 评测集列表(后端分页 {items,total},含 item_count / updated_at,按 updated_at 倒序,支持 search)
    ├─ POST /datasets ─────────── 建评测集
    ├─ GET  /datasets/{id} ─────── 评测集详情(名称/描述/样本数,Ch03 新增)

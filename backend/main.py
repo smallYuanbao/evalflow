@@ -87,9 +87,21 @@ class RunIn(BaseModel):
     config: str = "{}"
 
 
+# 服务身份标识。
+#
+# 为什么要有:多项目/多容器并行时,端口撞车是必然的,而 `{"status": "ok"}`
+# **回答不了"对面是谁"** —— 任何一个 FastAPI 服务都会这么答,Chroma 也会占着端口。
+# 于是前端静默连到别人家时,症状是「接口 404 / 数据不对」,很容易被误当成业务 bug。
+#
+# 本机就有一个活例子:8000 被 docker 里的 Chroma 占着,而前端默认地址一度也指向 8000。
+# 带上这个名字,scripts/devguard.mjs 才能在启动前直接说
+# 「8002 上坐的是 evalflow,不是别的」。改端口时**别改这个名字**。
+SERVICE_NAME = "evalflow"
+
+
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"service": SERVICE_NAME, "status": "ok"}
 
 
 @app.post("/datasets")

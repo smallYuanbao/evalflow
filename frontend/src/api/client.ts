@@ -2,7 +2,18 @@
 import axios, { AxiosError, type AxiosRequestConfig } from 'axios'
 import { getApiKey } from './key'
 
-export const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'
+// 开发环境默认直连本地后端。
+//
+// ⚠️ 端口是 **8002,不是 8000**。8000 在本机被 docker 里的 Chroma 占着
+// (`docker compose` 把它映射到了宿主机 8000,响应头带 chroma-trace-id),
+// 所以后端只能挪到 8002 —— 见 scripts/devguard.mjs 顶部的端口表。
+//
+// 这个默认值原先是 8000,也就是指向 Chroma:dev 下不设 VITE_API_BASE 时,
+// 前端的每个请求都会打到 Chroma 上、换回一个 404。症状看起来是"接口不存在",
+// 和病因(连错服务)隔得很远 —— 正是那种要查半天的坑。
+//
+// 生产走 frontend/.env.production 的 VITE_API_BASE=/api(同源反代),不受这里影响。
+export const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8002'
 
 // 统一错误类型:带状态码,上层可按 status 分支
 export class ApiError extends Error {

@@ -296,7 +296,7 @@ def knowledge_map():
 "retrieval_hits": json.loads(tr.retrieval_hits or "[]")
 ```
 
-验证:后端起 + Ollama 起,`curl localhost:8000/knowledge/map` 返回带 x/y 的 chunks 与 queries。
+验证:后端起 + Ollama 起,`curl localhost:8002/knowledge/map` 返回带 x/y 的 chunks 与 queries。
 
 ---
 
@@ -448,6 +448,6 @@ test("渲染知识库散点图", async () => {
 ### 验收(端到端)
 
 1. `ollama serve` 启动 Ollama(bge-m3 已下载)。
-2. 后端 `uv run uvicorn backend.main:app --reload --port 8000`;前端 `npm run dev`(5173)。
+2. 后端 `uv run uvicorn backend.main:app --reload --port 8002`;前端 `npm run dev`(5173)。
 3. 浏览器:发起一次 run,详情页「证据」列显示命中知识块 + 相似度分数;打开 `/knowledge` 看到 2D 散点图(按分类着色,query 用叉号叠加)。
 4. `uv run pytest` 后端全绿、`npm test` 前端全绿、`npm run build` 通过。

@@ -36,9 +36,9 @@
 # Redis(Celery broker)
 docker run -d --name evalflow-redis -p 6379:6379 redis:7-alpine
 
-# 后端
+# 后端（端口 8002 —— 8000 被 docker 里的 Chroma 占着，见 scripts/devguard.mjs）
 uv sync
-uv run uvicorn backend.main:app --port 8000
+uv run uvicorn backend.main:app --port 8002
 
 # 评测 worker(另开一个终端)
 uv run celery -A backend.celery_app worker --pool=threads --concurrency=4 --loglevel=info
@@ -61,7 +61,7 @@ uv run python -c "from backend.seed import seed; seed()"
 不评自己的 pipeline，而是评真实系统(见 [Ch26 spec](docs/superpowers/specs/2026-10-13-ch26-evaluate-babyai-design.md)):
 
 ```bash
-EVAL_TARGET=babyai BABYAI_BASE_URL=http://localhost:3001 uv run uvicorn backend.main:app --port 8000
+EVAL_TARGET=babyai BABYAI_BASE_URL=http://localhost:8010 uv run uvicorn backend.main:app --port 8002
 ```
 
 被测系统只要暴露两个接口:

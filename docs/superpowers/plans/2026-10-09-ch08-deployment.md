@@ -6,7 +6,7 @@
 
 **关键现状(决定实现方式)**:
 - `retriever.py` 用 `chromadb.PersistentClient(path="data/chroma")`,`tests/test_retriever.py` 靠 `monkeypatch.setattr(retriever, "_client", ...)` mock。所以 retriever 改造**必须保留模块级 `_client` 变量**。
-- 前端 `client.ts` BASE = `import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'`,可配置。
+- 前端 `client.ts` BASE = `import.meta.env.VITE_API_BASE ?? 'http://localhost:8002'`,可配置。
 - `config.py` 已用 pydantic-settings,加环境变量零成本。
 
 **核心决策(比 spec 更细化)**:retriever 不「一刀切改成 HttpClient」,而是**按环境切换** —— 设了 `CHROMA_HOST` 走独立 chroma 服务(HttpClient,容器模式),否则走本地文件(PersistentClient,本地 dev / 测试不变)。这样本地开发和现有测试零破坏,又满足容器化的标准架构。
@@ -35,7 +35,7 @@ _client = _make_client()  # 测试仍可 monkeypatch 这个变量
 
 ### Task 3:frontend Dockerfile + nginx + .env.production
 
-- [x] `frontend/.env.production`:`VITE_API_BASE=/api`(prod 走同源 nginx 反代,dev 仍直连 localhost:8000)。
+- [x] `frontend/.env.production`:`VITE_API_BASE=/api`(prod 走同源 nginx 反代,dev 仍直连 localhost:8002)。
 - [x] `frontend/nginx.conf`:静态托管 + SPA 回退(`try_files ... /index.html`)+ `/api/` 反代到 `backend:8000/`(去掉 /api 前缀)。
 - [x] `frontend/Dockerfile`:node:20 构建 → nginx 托管 dist。
 

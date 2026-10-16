@@ -4,7 +4,7 @@
 
 **Goal:** 跑通评测平台数据地基:6 张表 + demo 管线(mock) + seed 脚本。能存数据、能查数据、管线返回结构正确。
 
-**Architecture:** 单进程 FastAPI(:8000) + SQLite 单文件 `data/eval.db`,SQLAlchemy ORM。本章无业务接口,只有 `GET /health`;数据经 `seed.py` 直接写库。
+**Architecture:** 单进程 FastAPI(:8002) + SQLite 单文件 `data/eval.db`,SQLAlchemy ORM。本章无业务接口,只有 `GET /health`;数据经 `seed.py` 直接写库。
 
 **Tech Stack:** Python 3.12, uv, FastAPI, SQLAlchemy, pydantic-settings, pytest。
 
@@ -120,7 +120,7 @@ async def health():
 #!/usr/bin/env bash
 set -e
 mkdir -p data
-uv run uvicorn backend.main:app --port 8000 --reload
+uv run uvicorn backend.main:app --port 8002 --reload
 ```
 
 `chmod +x scripts/dev.sh`。

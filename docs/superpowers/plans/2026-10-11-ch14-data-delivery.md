@@ -48,6 +48,10 @@
 - [x] `backend/e2e_mock.py`:`mock_run_pipeline`(固定 output/retrieved/hits)+ `mock_judge`(`score=0.8`);`run_service.py` 在 `E2E_MOCK` 下替换 5 个 judge;`main.py` 的 `create_run` 同步执行(不走 celery)。
 - [x] `frontend/playwright.config.ts` + `frontend/e2e/main-flow.spec.ts`:造集 → 加样本 → 发评测 → 看结果四步断言。
 - [x] 端口隔离:后端 8001 / 前端 5174 + `reuseExistingServer:false`,避开 docker 映射的 8000/5173;`main.py` CORS 加 5174。
+
+> **2026-10-16 补充**:这组 e2e 端口(`5174` / `8001`)**仍然有效,没动过**。
+> 但"避开 docker 映射的 8000/5173"这句已不准确 —— `8000` 现在是 docker 里的 Chroma,
+> `5173` 是本仓库的 dev 前端(不再是 docker 映射)。当前端口表见 `scripts/devguard.mjs`。
 - [x] 修 e2e 暴露的两处真实 bug:空库隐藏「新建评测集」按钮(`DatasetsView` 空态提前 return)、antd Select placeholder 非 input 属性导致 `getByPlaceholder` 匹配不到。
 
 #### Task 8:交付加固(非 root / 健康检查 / HTTPS)

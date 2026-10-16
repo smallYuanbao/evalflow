@@ -97,6 +97,10 @@ SQLAlchemy 2.x 同时支持两者。选 `psycopg[binary]`:
 - 后端加 **`E2E_MOCK` 开关**:替换 `run_pipeline` 与 5 个 LLM judge 为确定性假实现(`score=0.8`),并把 `create_run` 从 `run_task.delay` 切到进程内同步 `execute_run`,不烧钱、不依赖 Ollama/DeepSeek/Redis。
 - `playwright.config.ts` 用 `webServer` 自动拉起后端(E2E_MOCK=1,8001)+ 前端 vite(5174);两端口用专用值且 `reuseExistingServer:false`,避开 docker 映射的 8000/5173,避免复用旧容器。
 
+> **2026-10-16 补充**:`5174` / `8001` 这两个 e2e 端口仍然有效。但"docker 映射的 8000/5173"
+> 已不成立:`8000` 现在是 docker 里的 Chroma,`5173` 是本仓库 dev 前端。
+> 当前端口表见 `scripts/devguard.mjs`。
+
 ### 交付加固
 
 - **非 root**:backend 镜像 `useradd --uid 1000 evalflow` + `USER evalflow`;frontend 用官方 `nginx:alpine`(已是非 root master)。

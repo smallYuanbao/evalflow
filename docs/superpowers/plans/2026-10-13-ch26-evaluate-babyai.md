@@ -12,6 +12,11 @@
 - [x] 改 baby-ai 的 `CHROMA_URL`;启动 baby-ai 的 python-server(3001)。
 - [x] 验证 `POST /api/chat` 能正常返回 `answer` + `references`。
 
+> **2026-10-16 补充**:Task 0 这一组是**当时**的做法,端口后来又调过一轮:
+> Chroma 现在回到 `8000`(docker),EvalFlow 后端在 `8002`;baby-ai 的前端 / 后端 / 精排
+> 分别在 `5180` / `8010` / `8011`(不再跑在 3001)。当前值以 `scripts/devguard.mjs` 顶部的端口表为准。
+> 原文保留 —— 它记录的是当时的决策,不是当前配置。
+
 ### Task 1:baby-ai 加 `/api/meta`
 
 - [x] 新增只读端点,返回:service / commit / model / embed_model / collection / collection_count / vector_top_k / rerank_top_k / query_rewrite。

@@ -8,7 +8,10 @@ client = TestClient(app)
 
 
 def test_health():
-    assert client.get("/health").json() == {"status": "ok"}
+    # 同 tests/test_health.py:改成子集断言,响应里还有 service 字段(服务身份标识)。
+    body = client.get("/health").json()
+    assert body["status"] == "ok"
+    assert body["service"] == "evalflow"
 
 
 def test_datasets_crud():

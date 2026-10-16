@@ -18,7 +18,7 @@ RAG 评测平台第一章:跑通数据地基。不做评测流程、不做 evalu
 
 ## 架构:单进程
 
-一条命令(`scripts/dev.sh`)拉起 FastAPI(:8000)。SQLite 单文件 `data/eval.db`,SQLAlchemy 管理 ORM。
+一条命令(`scripts/dev.sh`)拉起 FastAPI(:8002)。SQLite 单文件 `data/eval.db`,SQLAlchemy 管理 ORM。
 
 本章数据流只有一条:seed 脚本 → 直接写 SQLite → 用 SQL 验证。跑评测的 run 流程(第 2 章)才引入 FastAPI 业务接口。
 
