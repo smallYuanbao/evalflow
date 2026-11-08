@@ -46,15 +46,21 @@ def _external_snapshot() -> dict:
     **拿不到就显式标 meta_error,绝不用空值假装已知**——静默记空会让人误信
     「这次结果可与历史对比」,比不记更危险。
     """
-    if settings.eval_target != "babyai":
-        return {"target": settings.eval_target}
+    if settings.eval_target == "babyai":
+        from backend.external_babyai import fetch_meta
 
-    from backend.external_babyai import fetch_meta
+        base_url = settings.babyai_base_url
+    elif settings.eval_target == "ecom":
+        from backend.external_ecom import fetch_meta
+
+        base_url = settings.ecom_base_url
+    else:
+        return {"target": settings.eval_target}
 
     meta = fetch_meta()
     return {
-        "target": "babyai",
-        "base_url": settings.babyai_base_url,
+        "target": settings.eval_target,
+        "base_url": base_url,
         "meta": meta,
         "meta_error": None if meta else "拿不到被测系统状态(/api/meta 不可达),本次结果不可与历史对比",
     }

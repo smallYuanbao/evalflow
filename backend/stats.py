@@ -9,26 +9,55 @@ from backend.models import Dataset, DatasetItem, Generation, Run, Score, Trace
 
 
 def _avg(vals):
+    """求均值并保留 4 位小数。
+
+    空列表返回 None,不返回 0:
+      · 0   = 「评上了,但得分就是 0」
+      · None = 「一条都没评上,没有数据」
+    这两种情况在 judge 失败/覆盖率不足时必须能区分,否则均值会骗人。
+    """
     return round(sum(vals) / len(vals), 4) if vals else None
 
 
 def aggregate_run(run_id: int) -> dict:
-    """聚合一次 run 的分数:按指标注册表动态遍历(不再硬编码指标名)。judge 挂(NULL)不参与均值。"""
+    """把一次 run 的逐条分数聚合成 run 级指标。
+
+    数据来源(三个表):
+      · traces      —— 每条样本一行(问题/回答/证据)
+      · scores      —— 每条样本的每个指标一行;judge 失败时 value=NULL
+      · generations —— 每条样本的 token 与费用
+
+    聚合分三步:
+      1. 读数据:建立 trace→score、样本→分桶两个映射;
+      2. 收集数值:按指标收集非 NULL 分数,同时按分桶再收集一份;
+      3. 求均值 + 覆盖率:均值回答「多少分」,覆盖率回答「这个均值基于几条」。
+
+    返回的 dict 同时供前端、门禁、分桶归因、模型对比使用。
+    """
+    # ---- ① 读 run 和这次 run 实际产生的 trace ----
     s = SessionLocal()
     run = s.get(Run, run_id)
     traces = s.query(Trace).filter(Trace.run_id == run_id).all()
+    # 注意:traces 是「实际跑了几条」,可能少于数据集条数(中途失败/部分成功)。
+    # 所以后面的 item_count 用 len(traces),不是数据集的大小。
 
+    # ---- ② 样本 id → 分桶 ----
+    # 分桶存在 dataset_items 上;先一次性查成字典,避免在后面每条 trace 的循环里反复查库。
     item_ids = [tr.dataset_item_id for tr in traces]
     bucket_by_item = dict(
         s.query(DatasetItem.id, DatasetItem.bucket).filter(DatasetItem.id.in_(item_ids))
     ) if item_ids else {}
 
+    # ---- ③ 把扁平的 Score 行折成嵌套字典 ----
+    # 原始数据是「一行一个指标」:[(trace_id=1, name="recall", value=1.0), ...]
+    # 折成 {1: {"recall": 1.0, "hit_at_k": 1.0, ...}, 2: {...}}
+    # 后面的聚合都在这份嵌套字典上做,不用再碰数据库。
     score_by_trace = defaultdict(dict)
     if traces:
         for sc in s.query(Score).filter(Score.trace_id.in_([tr.id for tr in traces])):
             score_by_trace[sc.trace_id][sc.name] = sc.value
 
-    # 费用汇总(Ch12):累加该 run 所有样本的 token 与费用
+    # ---- ④ 费用汇总(Ch12):累加该 run 所有样本的 token 与费用 ----
     total_input = total_output = 0
     total_cost = 0.0
     if traces:
@@ -36,15 +65,25 @@ def aggregate_run(run_id: int) -> dict:
             total_input += g.input_tokens or 0
             total_output += g.output_tokens or 0
             total_cost += g.cost or 0.0
-    s.close()
+    s.close()  # 后面的计算全在内存里做,先把连接还掉
 
-    # 动态收集「实际评过」的指标名,按注册表顺序排;注册表外的兜底排最后(未知指标不丢)
+    # ---- ⑤ 这次 run 实际评了哪些指标 ----
+    # 不硬编码指标名:从 score 行里收集,再按 metrics.py 的 METRIC_ORDER 排序。
+    # 注册表里没有的指标(以后新加的)兜底排在最后,保证不会被静默丢掉。
     present = {name for tr in traces for name in score_by_trace.get(tr.id, {})}
     ordered = [m for m in METRIC_ORDER if m in present] + [m for m in present if m not in METRIC_ORDER]
 
+    # ---- ⑥ 准备两个收集器 ----
+    # overall: 每个指标一个列表,存所有样本的分数
+    # buckets: 每个分桶 × 每个指标一个列表
+    # count_by_bucket: 每个分桶有几条 trace(分母/展示用)
     overall = {m: [] for m in ordered}
     buckets = defaultdict(lambda: {m: [] for m in ordered})
     count_by_bucket = defaultdict(int)
+
+    # 逐条 trace 把分数放进对应的列表:
+    #   · v is not None → 才收;NULL(judge 失败)跳过,不记 0
+    #   · 同一条 trace 会同时进 overall 和它所属分桶的列表
     for tr in traces:
         b = bucket_by_item.get(tr.dataset_item_id, "未分桶")
         count_by_bucket[b] += 1
@@ -54,6 +93,12 @@ def aggregate_run(run_id: int) -> dict:
                 overall[m].append(v)
                 buckets[b][m].append(v)
 
+    # ---- ⑦ 分桶聚合 ----
+    # 对每个分桶、每个指标求均值,并把该桶的样本数 count 一起带上。
+    # 注意三点:
+    #   1) 这是「桶内样本的简单平均」,不是把各桶均值再平均;
+    #   2) count 是实际跑了几条 trace,不是数据集里该桶的条数;
+    #   3) 某指标在该桶内全是 NULL 时,_avg 返回 None,不会被误写成 0。
     by_bucket = {
         b: {"count": count_by_bucket[b], **{m: _avg(buckets[b][m]) for m in ordered}}
         for b in buckets
@@ -65,15 +110,26 @@ def aggregate_run(run_id: int) -> dict:
         "status": run.status,
         "config": run.config,
         "progress": run.progress,
+        # ---- ⑧ 整体结果 ----
+        # item_count:实际产生的 trace 数;如果小于数据集条数,说明这次没跑完整。
         "item_count": len(traces),
+        # scores:每个指标在所有样本上的均值;库里没有的指标不会出现在这里。
         "scores": {m: _avg(overall[m]) for m in ordered},
-        # Ch31:每个指标的**覆盖率**——均值基于几条算出来的。
-        # judge 失败会写一条 value=NULL 的 Score(不是不写),所以:
-        #   attempted = 有该指标行的 trace 数(应该评几条)
-        #   scored    = 其中真的评上的(非 NULL)
-        # 为什么必须露出:20 条里挂了 17 条 judge 时,均值只由剩下 3 条算出来,
-        # 而挂掉的往往是最难/最长的样本 → 均值会系统性偏高。界面只显示 0.9,
-        # 看不出它其实只基于 15% 的样本——比「没有分数」更容易误导。
+        # ---- ⑨ 覆盖率:这个均值是基于几条算出来的 ----
+        # judge 失败不是「不写 Score」,而是写一行 value=NULL。
+        # 所以:
+        #   attempted = 有几条 trace **存在**该指标的行(应该评几条)
+        #   scored    = 其中 value 非 NULL 的(真的评上了几条)
+        #
+        # 为什么必须露出来:
+        #   20 条样本里挂了 17 条 judge → 均值只由剩下 3 条算出来。
+        #   挂掉的往往是最长/最难的样本,所以均值会系统性偏乐观。
+        #   只看 0.9 会误以为「20 条都很好」,看 3/20 才知道样本不足。
+        #
+        # 例(run #22):
+        #   recall   → 15/15(只有库内题有这项)
+        #   rejection→ 4/4 (只有库外题有这项)
+        #   注意 attempted 不等于 item_count:不同指标覆盖的题目范围不同。
         "score_coverage": {
             m: {
                 "scored": len(overall[m]),
@@ -81,7 +137,15 @@ def aggregate_run(run_id: int) -> dict:
             }
             for m in ordered
         },
+        # ---- ⑩ 分桶结果 ----
+        # 结构:{ "护理": {"count": 4, "recall": 0.5, ...}, "喂养": {...}, ... }
+        # 用途:门禁说「整体掉了」之后,归因接口拿它对比两个 run,
+        #       定位是哪个桶掉的;前端也用它画分桶柱状图。
+        # 某个桶没有某指标(例如库外桶没有 recall)时,该指标的值是 None。
         "by_bucket": by_bucket,
+        # ---- ⑪ 费用 ----
+        # 来自 generations 表,只统计「evalflow 自己调 LLM」的 token;
+        # 被测系统(baby-ai)自己烧的 token 不在里面。
         "input_tokens": total_input,
         "output_tokens": total_output,
         "cost": round(total_cost, 6),

@@ -6,6 +6,7 @@ from backend.prompts import (
     CONTEXT_PRECISION_PROMPT,
     CONTEXT_RECALL_PROMPT,
     FAITHFULNESS_PROMPT,
+    REJECTION_PROMPT,
 )
 
 # 拒答信号词:命中任一即判定为「拒答」(库外题的正确行为)
@@ -24,45 +25,97 @@ REJECT_MARKERS = [
 def rejected(output: str) -> float:
     """机械判断回答是否为「拒答」。命中任一拒答词 → 1.0,否则 0.0(确定性,不碰 LLM)。
 
-    **这是启发式,不是判定**:词表覆盖不到的说法一律算「没拒答」(漏判)。
-    代价换来的是确定性 + 零成本(不烧 LLM),作为「库外题正确行为」的机械基线够用。
-    要更准只能上 LLM judge——但那样就失去了「机械基线」的意义,且引入方差。
-    评估新被测系统时,先看它实际的拒答措辞,按需扩这个词表。
+    **这是启发式,不是判定**:词表覆盖不到的说法会漏判;反过来,「嘴上说超出范围、
+    实际仍作答」又会被误判成拒答。它是双信号里的**快速信号**,不单独下结论——
+    最终判定见 {@link rejection_dual}。
     """
     return 1.0 if any(m in output for m in REJECT_MARKERS) else 0.0
 
 
-def recall(expected_output: str, retrieved_context: str) -> float:
-    """机械匹配:ground truth 要点命中率。expected_output 用 / 切要点,判断子串是否出现在 context。"""
-    points = [p.strip() for p in expected_output.split("/") if p.strip()]
-    if not points:
-        return 0.0
-    hits = sum(1 for p in points if p in retrieved_context)
-    return round(hits / len(points), 4)
+def rejection_judge(question: str, output: str) -> dict | None:
+    """LLM 裁判:回答是否真的拒答(看有没有实质作答,而不是只看措辞)。"""
+    return _judge(REJECTION_PROMPT.format(question=question, answer=output))
+
+
+def rejection_dual(question: str, output: str) -> tuple[float, str]:
+    """拒答双信号:词表 + LLM judge,judge 主判、词表兜底。
+
+    判定规则:
+      · judge 成功 → 以 judge 为准(能识别「口头拒答但实际作答」和「没命中文词的真拒答」);
+      · 两信号不一致 → 仍以 judge 为准,并把分歧写进 comment,方便回看词表是否该扩;
+      · judge 失败(LLM 不可用/解析失败) → 回退词表,保证评测不因裁判故障中断。
+
+    Returns:
+        (value, comment):value 1.0=拒答,0.0=未拒答;comment 记录两信号与分歧原因。
+    """
+    marker = rejected(output)
+    judged = rejection_judge(question, output)
+    if judged is None:
+        return marker, f"judge 失败,回退词表判定(词表={marker})"
+
+    value = 1.0 if judged["score"] >= 0.5 else 0.0
+    reason = judged.get("reason", "")
+    if value == marker:
+        return value, f"双信号一致(词表={marker}, judge={value}):{reason}"
+    return value, f"双信号不一致(词表={marker}, judge={value}),以 judge 为准:{reason}"
 
 
 def _points(expected_output: str) -> list[str]:
     return [p.strip() for p in expected_output.split("/") if p.strip()]
 
 
-def hit_at_k(expected_output: str, hits: list[dict]) -> float:
-    """检索命中率@k(Ch20):top-k 里是否命中任一相关 chunk(0/1)。
+def _has_context(retrieved_context: str) -> bool:
+    return bool(retrieved_context.strip()) and retrieved_context.strip() != "(无证据)"
 
-    相关 = chunk 文本含任一要点(与 recall 同源推导,零新增标注)。
+
+def point_hit(point: str, text: str) -> bool:
+    """一个要点命中文本；`a|b` 表示任一说法都算。
+
+    ecom 的要点来自 Ch02 的正则/同义词（如「不可叠加|不能叠加」），
+    EvalFlow 侧做向后兼容的任选语义；不含 `|` 的旧数据行为不变。
+    """
+    return any(alt.strip() and alt.strip() in text for alt in point.split("|"))
+
+
+def recall(expected_output: str, retrieved_context: str) -> float | None:
+    """机械匹配:ground truth 要点命中率。
+
+    没有检索上下文（B/C/E 出口）时返回 None，不记 0——
+    「没有检索」和「检索了但没命中」是两件事。
     """
     points = _points(expected_output)
     if not points:
         return 0.0
-    return 1.0 if any(any(p in h["text"] for p in points) for h in hits) else 0.0
+    if not _has_context(retrieved_context):
+        return None
+    hits = sum(1 for p in points if point_hit(p, retrieved_context))
+    return round(hits / len(points), 4)
 
 
-def mrr(expected_output: str, hits: list[dict]) -> float:
-    """MRR 倒数排名(Ch20):1 / 首个相关 chunk 的排名;没有相关命中则 0。"""
+def hit_at_k(expected_output: str, hits: list[dict]) -> float | None:
+    """检索命中率@k:top-k 里是否命中任一相关 chunk(0/1)。
+
+    没有 hits（非知识出口）时返回 None，不记 0。
+    """
     points = _points(expected_output)
     if not points:
         return 0.0
+    if not hits:
+        return None
+    return 1.0 if any(
+        any(point_hit(p, h["text"]) for p in points) for h in hits
+    ) else 0.0
+
+
+def mrr(expected_output: str, hits: list[dict]) -> float | None:
+    """MRR 倒数排名:1 / 首个相关 chunk 的排名；没有 hits 时返回 None。"""
+    points = _points(expected_output)
+    if not points:
+        return 0.0
+    if not hits:
+        return None
     for i, h in enumerate(hits):
-        if any(p in h["text"] for p in points):
+        if any(point_hit(p, h["text"]) for p in points):
             return round(1.0 / (i + 1), 4)
     return 0.0
 

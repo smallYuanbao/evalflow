@@ -1,7 +1,9 @@
 import json
 import logging
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 
 from backend import llm
 from backend.config import settings
@@ -16,6 +18,7 @@ from backend.evaluators import (
     mrr,
     recall,
     rejected,
+    rejection_dual,
 )
 from backend.models import DatasetItem, Generation, Run, Score, Trace
 from backend.pipeline import run_pipeline
@@ -24,6 +27,55 @@ from backend.snapshot import config_retrieval, config_top_k
 logger = logging.getLogger(__name__)
 
 ABSENT_BUCKET = "库外"  # 库外题:知识库里没有答案,正确行为是拒答
+
+HEARTBEAT_INTERVAL_SECONDS = 10
+
+
+def _now_str() -> str:
+    """与 models._now 同一格式(本地时间、秒级),保证可以和 created_at 直接比较。"""
+    return datetime.now().isoformat(timespec="seconds")
+
+
+class _RunHeartbeat:
+    """run 执行期间定时刷新 `runs.last_heartbeat_at`。
+
+    为什么不能拿 progress 当心跳:单条样本要跑「检索 + 生成 + 5 个 judge」,
+    可能几分钟 progress 都不变;按 progress 超时回收会把正在跑的 run 误杀。
+    """
+
+    def __init__(self, run_id: int):
+        self.run_id = run_id
+        self._stop = threading.Event()
+        self._thread = threading.Thread(
+            target=self._loop, name=f"run-heartbeat-{run_id}", daemon=True
+        )
+
+    @staticmethod
+    def _touch(run_id: int) -> None:
+        s = SessionLocal()
+        try:
+            s.query(Run).filter(Run.id == run_id).update(
+                {Run.last_heartbeat_at: _now_str()}, synchronize_session=False
+            )
+            s.commit()
+        except Exception as e:
+            # 心跳失败不能影响主流程;下一轮会重试
+            logger.warning("run 心跳写入失败: %s", e, extra={"run_id": run_id})
+        finally:
+            s.close()
+
+    def _loop(self) -> None:
+        while not self._stop.wait(HEARTBEAT_INTERVAL_SECONDS):
+            self._touch(self.run_id)
+
+    def start(self) -> None:
+        # 立即写一次:覆盖「刚启动、还没到第一个心跳周期」的窗口
+        self._touch(self.run_id)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        self._thread.join(timeout=2)
 
 if settings.e2e_mock:
     # E2E 下替换 pipeline 与 5 个 LLM judge 为确定性假实现(Ch14);recall/rejected 是机械基线,保持真实
@@ -37,6 +89,11 @@ elif settings.eval_target == "babyai":
     from backend.external_babyai import run_pipeline_babyai
 
     run_pipeline = run_pipeline_babyai
+elif settings.eval_target == "ecom":
+    # Ch07：被测系统换成 ecom-agent，走它的非流式评测门面。
+    from backend.external_ecom import run_pipeline_ecom
+
+    run_pipeline = run_pipeline_ecom
 
 
 def execute_run(run_id: int) -> None:
@@ -73,6 +130,10 @@ def execute_run(run_id: int) -> None:
                                            "duration_ms": int((time.time() - t0) * 1000)})
         return
 
+    # 心跳独立于进度:单条样本可能跑几分钟,progress 不动不代表 run 死了。
+    heartbeat = _RunHeartbeat(run_id)
+    heartbeat.start()
+    _touch_progress(run_id)  # 进度超时的起点
     try:
         with ThreadPoolExecutor(max_workers=max(1, settings.run_concurrency)) as pool:
             futures = [
@@ -89,6 +150,8 @@ def execute_run(run_id: int) -> None:
         logger.exception("run 执行失败", extra={"run_id": run_id,
                                                 "duration_ms": int((time.time() - t0) * 1000)})
         _mark("failed")
+    finally:
+        heartbeat.stop()
 
 
 def _process_item(run_id: int, item_id: int, input_: str, expected_output: str,
@@ -104,14 +167,40 @@ def _process_item(run_id: int, item_id: int, input_: str, expected_output: str,
     hits = [{"text": h["text"], "score": h["score"], "rank": i + 1}
             for i, h in enumerate(out["hits"])]
 
-    # 5 个 LLM judge 提前算(不持 DB 写锁);库外题只评拒答,无 judge
-    judges = [] if bucket == ABSENT_BUCKET else [
-        ("context_precision", context_precision(input_, out["retrieved_context"])),
-        ("context_recall", context_recall(input_, expected_output, out["retrieved_context"])),
-        ("faithfulness", faithfulness(out["output"], out["retrieved_context"])),
-        ("answer_relevance", answer_relevance(input_, out["output"])),
-        ("answer_correctness", answer_correctness(input_, expected_output, out["output"])),
-    ]
+    context = str(out.get("retrieved_context") or "")
+    has_context = bool(context.strip()) and context.strip() != "(无证据)"
+
+    # LLM judge 提前算(不持 DB 写锁);库外题只评拒答。
+    # 无检索上下文的样本（B/C/E 出口）跳过 context/faithfulness，
+    # 否则会拿「(无证据)」去问 judge，分数没有意义。
+    judges = []
+    if bucket != ABSENT_BUCKET:
+        if has_context:
+            judges.extend(
+                [
+                    ("context_precision", context_precision(input_, context)),
+                    ("context_recall", context_recall(input_, expected_output, context)),
+                    ("faithfulness", faithfulness(out["output"], context)),
+                ]
+            )
+        judges.extend(
+            [
+                ("answer_relevance", answer_relevance(input_, out["output"])),
+                ("answer_correctness", answer_correctness(input_, expected_output, out["output"])),
+            ]
+        )
+
+    # 库外题:拒答双信号(词表 + LLM judge)。和上面的 judge 一样在开 DB session 前算完——
+    # 把一次 LLM 调用夹在写事务里,并发时会撞 SQLite 的 database is locked。
+    # E2E 必须确定性且不联网,所以只走词表信号(与 Ch14 的 mock 语义一致)。
+    rejection_value: float | None = None
+    rejection_comment = ""
+    if bucket == ABSENT_BUCKET:
+        if settings.e2e_mock:
+            rejection_value = rejected(out["output"])
+            rejection_comment = "E2E:仅词表信号"
+        else:
+            rejection_value, rejection_comment = rejection_dual(input_, out["output"])
 
     # 本样本「生成 + judge」累计的 token 与费用(算完再开 session,保持事务短)
     prompt_tokens, completion_tokens = llm.get_usage()
@@ -129,15 +218,22 @@ def _process_item(run_id: int, item_id: int, input_: str, expected_output: str,
     s.add(Generation(trace_id=trace_id, model=settings.chat_model,
                      input_tokens=prompt_tokens, output_tokens=completion_tokens, cost=cost))
     if bucket == ABSENT_BUCKET:
-        # 库外题:只评「拒答」(正确行为是不答)
-        s.add(Score(trace_id=tr.id, name="rejection", value=rejected(out["output"])))
+        # 库外题:只评「拒答」(正确行为是不答);值与判定依据都落库
+        s.add(Score(trace_id=tr.id, name="rejection", value=rejection_value,
+                    comment=rejection_comment))
     else:
-        # recall 机械基线(确定性,0 次 LLM)
+        # 机械指标：无检索上下文时记 NULL，不记 0。
+        # 「没有检索」和「检索了但没命中」是两件事。
+        no_context_comment = "" if has_context else "无检索上下文"
         s.add(Score(trace_id=tr.id, name="recall",
-                    value=recall(expected_output, out["retrieved_context"])))
-        # 检索质量机械指标(Ch20):hit@k / MRR,从有序 hits 算,同样不烧 LLM
-        s.add(Score(trace_id=tr.id, name="hit_at_k", value=hit_at_k(expected_output, out["hits"])))
-        s.add(Score(trace_id=tr.id, name="mrr", value=mrr(expected_output, out["hits"])))
+                    value=recall(expected_output, context),
+                    comment=no_context_comment))
+        s.add(Score(trace_id=tr.id, name="hit_at_k",
+                    value=hit_at_k(expected_output, out["hits"]),
+                    comment=no_context_comment))
+        s.add(Score(trace_id=tr.id, name="mrr",
+                    value=mrr(expected_output, out["hits"]),
+                    comment=no_context_comment))
         for name, r in judges:
             if r is None:
                 s.add(Score(trace_id=tr.id, name=name, value=None, comment="judge 失败"))
@@ -149,10 +245,26 @@ def _process_item(run_id: int, item_id: int, input_: str, expected_output: str,
     logger.info("样本评测完成", extra={"run_id": run_id, "trace_id": trace_id, "latency_ms": latency_ms})
 
 
+def _touch_progress(run_id: int) -> None:
+    """记录「开始执行」的时间:进度超时判定需要一个起点(否则 progress=0 时没有参照)。"""
+    s = SessionLocal()
+    try:
+        s.query(Run).filter(Run.id == run_id).update(
+            {Run.last_progress_at: _now_str()}, synchronize_session=False)
+        s.commit()
+    except Exception as e:
+        logger.warning("run 进度时间写入失败: %s", e, extra={"run_id": run_id})
+    finally:
+        s.close()
+
+
 def _bump_progress(run_id: int) -> None:
     """进度自增(原子 UPDATE progress = progress + 1,避免并发读-改-写竞争)。"""
     s = SessionLocal()
     s.query(Run).filter(Run.id == run_id).update(
-        {Run.progress: Run.progress + 1}, synchronize_session=False)
+        {Run.progress: Run.progress + 1,
+         Run.last_heartbeat_at: _now_str(),
+         Run.last_progress_at: _now_str()},
+        synchronize_session=False)
     s.commit()
     s.close()

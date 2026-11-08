@@ -1,5 +1,6 @@
 import json
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,12 +30,40 @@ async def lifespan(app: FastAPI):
 
 
 def _recover_stale_runs() -> None:
-    """进程重启后,残留 running 的 run 视为中断,标记 failed,避免永久卡 running。"""
+    """进程重启后,只回收**真正没有心跳**的 running run。
+
+    不能一启动就把所有 running 标 failed:API 的 `--reload` 也会走 lifespan,
+    而 worker 是另一个进程、可能仍在正常执行。2026-10-18 实测过:改一个文档
+    触发 reload,正在跑的 run 被临时标成 failed(跑完才被 `_mark("done")` 覆盖)。
+
+    判定要两个信号都超时:
+      · `last_heartbeat_at` —— worker 进程还活着;
+      · `last_progress_at`  —— 还在产出结果(心跳正常但主流程卡死时要靠它)。
+    老库没有这两个值时回退到 created_at。
+    """
+    now = datetime.now()
+    heartbeat_cutoff = now - timedelta(seconds=max(1, settings.stale_run_timeout))
+    progress_cutoff = now - timedelta(seconds=max(1, settings.stale_run_progress_timeout))
+
+    def _parse(raw: str | None) -> datetime | None:
+        try:
+            return datetime.fromisoformat(raw) if raw else None
+        except ValueError:
+            return None
+
     s = SessionLocal()
-    for r in s.query(Run).filter(Run.status == "running"):
-        r.status = "failed"
-    s.commit()
-    s.close()
+    try:
+        for r in s.query(Run).filter(Run.status == "running"):
+            heartbeat = _parse(r.last_heartbeat_at) or _parse(r.created_at)
+            progress = _parse(r.last_progress_at) or _parse(r.created_at)
+            heartbeat_ok = heartbeat is not None and heartbeat >= heartbeat_cutoff
+            progress_ok = progress is not None and progress >= progress_cutoff
+            if heartbeat_ok and progress_ok:
+                continue  # 进程活着且还在产出,不是残留
+            r.status = "failed"
+        s.commit()
+    finally:
+        s.close()
 
 
 app = FastAPI(title="EvalFlow", version="0.2.0", lifespan=lifespan)

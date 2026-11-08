@@ -41,6 +41,12 @@ class Run(Base):
     status = Column(String, default="running")  # running / done / failed
     config = Column(Text, default="{}")         # 配置快照 JSON
     progress = Column(Integer, default=0)       # 已完成样本数(进度,Ch10)
+    # 执行期间由 worker 定时刷新。不能用 progress 当心跳:单条样本要跑检索 + 5 个 judge,
+    # 可能几分钟没有进度变化,只看 progress 会把活着的 run 误判成残留(2026-10-19)。
+    last_heartbeat_at = Column(String, nullable=True)
+    # 最近一次「有样本完成」的时间。心跳只能证明进程活着,证明不了没卡死;
+    # 两个信号都超时才算残留(2026-10-19)。
+    last_progress_at = Column(String, nullable=True)
     created_at = Column(String, default=_now, index=True)  # 列表按时间倒序,加索引(Ch19)
 
 

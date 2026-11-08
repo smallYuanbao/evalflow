@@ -14,6 +14,12 @@ class Settings(BaseSettings):
     chroma_port: int = 8000                         # chroma 服务端口
     redis_url: str = "redis://localhost:6379/0"     # Celery broker/backend(评测任务队列)
     run_concurrency: int = 4                        # 单个 run 内样本并发数(LLM 是 IO 密集,线程合适)
+    # 残留 run 回收:worker 每 10s 刷新一次心跳;超过这个秒数没心跳才判 failed。
+    # 必须大于单条样本的最长耗时(检索 + judge),否则会误杀活着的 run。
+    stale_run_timeout: int = 180
+    # 进度超时:进程活着(心跳正常)但长时间没有样本完成,也可能卡死。
+    # 要明显大于「单条样本最坏耗时 × 并发批次」,避免误杀。
+    stale_run_progress_timeout: int = 1800
     # —— Ch11 LLM 可靠性 ——
     chat_retries: int = 3                 # 可重试错误(超时/429/5xx)的重试次数,最多 4 次尝试
     chat_retry_base: float = 0.5          # 指数退避基数(秒):0.5/1/2/4... + 抖动
@@ -28,10 +34,14 @@ class Settings(BaseSettings):
     # —— Ch14 交付硬化 ——
     e2e_mock: bool = False  # E2E 开关:替换 run_pipeline/judge 为确定性假实现,并同步执行(不走 celery)
     # —— Ch26 评测外部系统 ——
-    eval_target: str = "local"                      # local=自己的 toy pipeline;babyai=HTTP 调 baby-ai
+    eval_target: str = "local"                      # local / babyai / ecom
     babyai_base_url: str = "http://localhost:3001"  # baby-ai 的 python-server 地址
     babyai_timeout: int = 120                       # baby-ai 单次问答超时(秒);它要跑检索+精排+生成,给足
     babyai_max_rpm: int = 8                         # 自我限流:每分钟最多打多少次(被测系统是 10/min,留余量)
+    # Ch07 对接 ecom-agent：它提供非流式 /api/eval/chat + /api/meta
+    ecom_base_url: str = "http://127.0.0.1:8081"
+    ecom_timeout: int = 120
+    ecom_max_rpm: int = 30
     # —— Ch30 裁判独立配置 ——
     # 留空 = 回退到 CHAT_*(兼容旧行为)。**单独配裁判是为了能做 A/B 和交叉验证**:
     # Ch28 实测「换裁判让 context_recall 差 0.31,而门禁容忍度只有 0.05」——

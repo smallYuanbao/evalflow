@@ -61,8 +61,22 @@ uv run python -c "from backend.seed import seed; seed()"
 不评自己的 pipeline，而是评真实系统(见 [Ch26 spec](docs/superpowers/specs/2026-10-13-ch26-evaluate-babyai-design.md)):
 
 ```bash
-EVAL_TARGET=babyai BABYAI_BASE_URL=http://localhost:8010 uv run uvicorn backend.main:app --port 8002
+EVAL_TARGET=babyai BABYAI_BASE_URL=http://localhost:3001 uv run uvicorn backend.main:app --port 8002
 ```
+
+> ⚠️ **这一行里有两个端口，含义完全不同，别改混**：
+>
+> - `BABYAI_BASE_URL=http://localhost:3001` —— 指的是**被测系统**(baby-ai)。
+>   3001 是**专为评测留的实例**，不要改成 8010：那是 baby-ai 的日常开发实例，
+>   随时会被重启、被改代码，而评测快照要靠 `/api/meta` 记录被测系统的版本与配置 ——
+>   被测对象自己在变，快照就没有意义了。
+> - `--port 8002` —— 指的是 **evalflow 自己的**后端。
+>
+> baby-ai 那个被测实例要单独起，且**刻意不加 `--reload`**（评测期间它不该自己重启）：
+>
+> ```bash
+> cd baby-ai/python-server && .venv/bin/python -m uvicorn app.main:app --port 3001
+> ```
 
 被测系统只要暴露两个接口:
 

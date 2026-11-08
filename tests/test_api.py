@@ -73,17 +73,25 @@ def test_list_runs_and_items(monkeypatch):
 
 
 def test_recover_stale_runs():
+    from datetime import datetime, timedelta
+
     from backend import main
     from backend.db import SessionLocal, init_db
     from backend.models import Dataset, Run
 
-    # 造一个残留 running 的 run,直接调 _recover_stale_runs 验证被标 failed(Ch10 兜底)
+    # 造一个「很久没有心跳」的 running run,验证被回收(Ch10 兜底)。
+    # 心跳新鲜的不动,见 tests/test_stale_runs.py。
     init_db()
     s = SessionLocal()
     ds = Dataset(name="t", description="")
     s.add(ds)
     s.flush()
-    run = Run(dataset_id=ds.id, status="running", config="{}")
+    run = Run(
+        dataset_id=ds.id,
+        status="running",
+        config="{}",
+        created_at=(datetime.now() - timedelta(minutes=10)).isoformat(timespec="seconds"),
+    )
     s.add(run)
     s.commit()
     rid = run.id

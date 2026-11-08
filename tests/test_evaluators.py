@@ -11,6 +11,25 @@ def test_recall_partial_hit():
     assert evaluators.recall("物理降温/就医/用药", ctx) == round(1 / 3, 4)
 
 
+def test_recall_supports_alternatives():
+    ctx = "优惠券不可叠加使用。"
+    assert evaluators.recall("不可叠加|不能叠加|只能使用一张", ctx) == 1.0
+
+
+def test_recall_without_context_is_none():
+    """B/C/E 出口没有检索上下文：记 NULL，不记 0。"""
+    assert evaluators.recall("物理降温/就医", "") is None
+    assert evaluators.recall("物理降温/就医", "(无证据)") is None
+
+
+def test_hit_at_k_without_hits_is_none():
+    assert evaluators.hit_at_k("物理降温/就医", []) is None
+
+
+def test_mrr_without_hits_is_none():
+    assert evaluators.mrr("物理降温/就医", []) is None
+
+
 def test_hit_at_k():
     hits = [{"text": "物理降温", "score": 0.9}, {"text": "睡眠", "score": 0.8}]
     assert evaluators.hit_at_k("物理降温/就医", hits) == 1.0   # 首个命中
@@ -50,6 +69,46 @@ def test_rejected_recognizes_scope_refusal():
     run9_travel = ("🏷️ **先给结论**：抱歉，我是育儿助手小熊🐻，只能回答育儿相关问题哦～"
                    "「北京旅游景点推荐」不属于我能回答的范围，我的建议也会误导你。")
     assert evaluators.rejected(run9_travel) == 1.0
+
+
+def test_rejection_dual_judge_overrides_marker(monkeypatch):
+    """词表误判:嘴上说「只能回答育儿问题」,随后照样给出教程 → judge 判未拒答。"""
+    monkeypatch.setattr(
+        evaluators, "rejection_judge",
+        lambda q, o: {"score": 0.0, "reason": "虽然声明了范围,但随后给出了完整操作步骤"},
+    )
+    value, comment = evaluators.rejection_dual("怎么用 Python 写爬虫", "抱歉,我只能回答育儿问题哦～ 用 requests ...")
+    assert value == 0.0
+    assert "不一致" in comment and "以 judge 为准" in comment
+
+
+def test_rejection_dual_judge_catches_marker_miss(monkeypatch):
+    """词表漏判:换个说法「可不归我管」,judge 能识别这是拒答。"""
+    monkeypatch.setattr(
+        evaluators, "rejection_judge",
+        lambda q, o: {"score": 1.0, "reason": "明确表示不处理该问题"},
+    )
+    value, comment = evaluators.rejection_dual("如何给汽车换轮胎", "这个问题可不归我管啦～我是小熊育儿助手")
+    assert value == 1.0
+    assert "不一致" in comment
+
+
+def test_rejection_dual_agrees(monkeypatch):
+    monkeypatch.setattr(
+        evaluators, "rejection_judge",
+        lambda q, o: {"score": 1.0, "reason": "说明没有相关资料"},
+    )
+    value, comment = evaluators.rejection_dual("q", "目前没有相关证据,我不清楚。")
+    assert value == 1.0
+    assert "一致" in comment
+
+
+def test_rejection_dual_falls_back_to_marker(monkeypatch):
+    """judge 故障不中断评测:退回词表,并明确标注。"""
+    monkeypatch.setattr(evaluators, "rejection_judge", lambda q, o: None)
+    value, comment = evaluators.rejection_dual("q", "目前没有相关证据,我不清楚。")
+    assert value == 1.0
+    assert "回退词表" in comment
 
 
 def test_judge_returns_score(monkeypatch):

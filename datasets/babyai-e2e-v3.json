@@ -1,0 +1,320 @@
+{
+  "name": "baby-ai 端到端 v3",
+  "description": "19 条（库内 15 + 库外 4）。v2 修订版：要点对齐知识库用词；肠绞痛移到知识缺口数据集；红点点标记为开放题。",
+  "source": "由 datasets/babyai-e2e-v2.json 修订",
+  "supersedes": "babyai-e2e-v2.json",
+  "exported_at": "2026-10-18",
+  "dataset_hash": "1fe68f0ee88454e20e63790b65b4437f",
+  "item_count": 19,
+  "hash_note": "dataset_hash = backend.snapshot.content_hash([{input,expected_output,bucket}...])，与 Run.config.dataset_hash 同一算法",
+  "gold_scores_note": "2026-10-19 由 Claude 按评分卡在 run #22 输出上预标（AI draft），等待人工抽检；校准结论见 docs/superpowers/plans/2026-10-18-rejection-dual-signal-and-gold.md",
+  "change_log": [
+    {
+      "source_db_id": 15,
+      "field": "expected_output",
+      "from": "补水/脱水/就医",
+      "to": "补液/脱水/就医",
+      "reason": "补水→补液：KB 与证据用词为“补液”"
+    },
+    {
+      "source_db_id": 17,
+      "field": "expected_output",
+      "from": "揉腹/纤维/就医",
+      "to": "按摩/纤维/就医",
+      "reason": "揉腹→按摩：证据原文为“按摩肚子/顺时针按摩”"
+    },
+    {
+      "source_db_id": 18,
+      "field": "expected_output",
+      "from": "拍嗝/竖抱/生理性",
+      "to": "奶嗝/竖起来/生理性",
+      "reason": "拍嗝→奶嗝、竖抱→竖起来：对齐证据原文"
+    },
+    {
+      "source_db_id": 20,
+      "field": "expected_output",
+      "from": "满6个月/铁米粉/菜泥",
+      "to": "6个月/铁米粉/菜泥",
+      "reason": "满6个月→6个月：KB 常用写法"
+    },
+    {
+      "source_db_id": 22,
+      "field": "expected_output",
+      "from": "勤换尿布/氧化锌/干燥",
+      "to": "勤换/氧化锌/干燥",
+      "reason": "勤换尿布→勤换：证据用“勤换/尿不湿”"
+    },
+    {
+      "source_db_id": 25,
+      "field": "expected_output",
+      "from": "湿疹/痱子/就医",
+      "to": "湿疹/痱子/皮肤科",
+      "reason": "就医→皮肤科：证据原文“儿科或皮肤科看一下”"
+    },
+    {
+      "source_db_id": 26,
+      "field": "expected_output",
+      "from": "常见反应/38.5度/就医",
+      "to": "正常反应/38.5度/就医",
+      "reason": "常见反应→正常反应：KB 0 篇 vs 13 篇"
+    },
+    {
+      "source_db_id": 25,
+      "field": "bucket",
+      "from": "皮肤",
+      "to": "皮肤-开放",
+      "reason": "C：保留宽泛问法，标记为开放题单独归因"
+    },
+    {
+      "source_db_id": 19,
+      "field": "moved_to",
+      "from": "baby-ai 端到端 v2",
+      "to": "baby-ai 知识缺口 v1",
+      "reason": "B：KB 无该主题内容，改测“资料不足时应拒答”"
+    }
+  ],
+  "items": [
+    {
+      "index": 1,
+      "db_id": 14,
+      "input": "宝宝发烧38度怎么办",
+      "expected_output": "物理降温/退烧药/就医",
+      "bucket": "护理",
+      "gold_scores": {
+        "faithfulness": 0.5,
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "answer_relevance": 0.9,
+        "answer_correctness": 1.0
+      }
+    },
+    {
+      "index": 2,
+      "db_id": 15,
+      "input": "宝宝拉肚子怎么办",
+      "expected_output": "补液/脱水/就医",
+      "bucket": "护理",
+      "gold_scores": {
+        "faithfulness": 0.25,
+        "context_precision": 0.8,
+        "context_recall": 0.67,
+        "answer_relevance": 0.9,
+        "answer_correctness": 1.0
+      }
+    },
+    {
+      "index": 3,
+      "db_id": 16,
+      "input": "宝宝咳嗽有痰怎么办",
+      "expected_output": "化痰/就医/护理",
+      "bucket": "护理",
+      "gold_scores": {
+        "faithfulness": 0.25,
+        "context_precision": 0.8,
+        "context_recall": 0.67,
+        "answer_relevance": 0.95,
+        "answer_correctness": 1.0
+      }
+    },
+    {
+      "index": 4,
+      "db_id": 17,
+      "input": "宝宝便秘怎么办",
+      "expected_output": "按摩/纤维/就医",
+      "bucket": "护理",
+      "gold_scores": {
+        "faithfulness": 0.25,
+        "context_precision": 1.0,
+        "context_recall": 0.33,
+        "answer_relevance": 0.95,
+        "answer_correctness": 1.0
+      }
+    },
+    {
+      "index": 5,
+      "db_id": 18,
+      "input": "宝宝吐奶怎么办",
+      "expected_output": "奶嗝/竖起来/生理性",
+      "bucket": "喂养",
+      "gold_scores": {
+        "faithfulness": 0.5,
+        "context_precision": 0.8,
+        "context_recall": 1.0,
+        "answer_relevance": 0.95,
+        "answer_correctness": 1.0
+      }
+    },
+    {
+      "index": 6,
+      "db_id": 20,
+      "input": "6个月宝宝能加辅食吗",
+      "expected_output": "6个月/铁米粉/菜泥",
+      "bucket": "喂养",
+      "gold_scores": {
+        "faithfulness": 0.25,
+        "context_precision": 0.8,
+        "context_recall": 1.0,
+        "answer_relevance": 0.9,
+        "answer_correctness": 1.0
+      }
+    },
+    {
+      "index": 7,
+      "db_id": 21,
+      "input": "宝宝湿疹怎么护理",
+      "expected_output": "保湿/润肤霜/水温",
+      "bucket": "皮肤",
+      "gold_scores": {
+        "faithfulness": 0.5,
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "answer_relevance": 0.9,
+        "answer_correctness": 1.0
+      }
+    },
+    {
+      "index": 8,
+      "db_id": 22,
+      "input": "宝宝红屁屁怎么办",
+      "expected_output": "勤换/氧化锌/干燥",
+      "bucket": "皮肤",
+      "gold_scores": {
+        "faithfulness": 0.5,
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "answer_relevance": 0.9,
+        "answer_correctness": 1.0
+      }
+    },
+    {
+      "index": 9,
+      "db_id": 23,
+      "input": "疫苗后发烧怎么办",
+      "expected_output": "观察/38.5度/就医",
+      "bucket": "疫苗",
+      "gold_scores": {
+        "faithfulness": 0.5,
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "answer_relevance": 0.95,
+        "answer_correctness": 1.0
+      }
+    },
+    {
+      "index": 10,
+      "db_id": 24,
+      "input": "娃夜里老闹腾不睡觉咋办",
+      "expected_output": "出牙/睡眠倒退/环境",
+      "bucket": "睡眠",
+      "gold_scores": {
+        "faithfulness": 0.25,
+        "context_precision": 0.8,
+        "context_recall": 0.0,
+        "answer_relevance": 0.95,
+        "answer_correctness": 0.33
+      }
+    },
+    {
+      "index": 11,
+      "db_id": 25,
+      "input": "小宝宝身上起红点点是啥",
+      "expected_output": "湿疹/痱子/皮肤科",
+      "bucket": "皮肤-开放",
+      "gold_scores": {
+        "faithfulness": 0.5,
+        "context_precision": 0.6,
+        "context_recall": 0.67,
+        "answer_relevance": 0.95,
+        "answer_correctness": 1.0
+      }
+    },
+    {
+      "index": 12,
+      "db_id": 26,
+      "input": "孩子打完针发烧了要紧吗",
+      "expected_output": "正常反应/38.5度/就医",
+      "bucket": "疫苗",
+      "gold_scores": {
+        "faithfulness": 0.5,
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "answer_relevance": 0.95,
+        "answer_correctness": 1.0
+      }
+    },
+    {
+      "index": 13,
+      "db_id": 27,
+      "input": "母乳宝宝大便稀稀的正常不",
+      "expected_output": "正常/体重/母乳",
+      "bucket": "排便",
+      "gold_scores": {
+        "faithfulness": 0.5,
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "answer_relevance": 0.9,
+        "answer_correctness": 1.0
+      }
+    },
+    {
+      "index": 14,
+      "db_id": 28,
+      "input": "宝宝半夜突然哭醒哄不好",
+      "expected_output": "肠绞痛/出牙/就医",
+      "bucket": "睡眠",
+      "gold_scores": {
+        "faithfulness": 0.25,
+        "context_precision": 0.8,
+        "context_recall": 0.0,
+        "answer_relevance": 0.95,
+        "answer_correctness": 0.67
+      }
+    },
+    {
+      "index": 15,
+      "db_id": 29,
+      "input": "九个多月还不会爬正常吗",
+      "expected_output": "个体差异/发育/就医",
+      "bucket": "发育",
+      "gold_scores": {
+        "faithfulness": 0.5,
+        "context_precision": 0.8,
+        "context_recall": 1.0,
+        "answer_relevance": 0.95,
+        "answer_correctness": 1.0
+      }
+    },
+    {
+      "index": 16,
+      "db_id": 30,
+      "input": "如何给汽车换轮胎",
+      "expected_output": "",
+      "bucket": "库外",
+      "gold_scores": null
+    },
+    {
+      "index": 17,
+      "db_id": 31,
+      "input": "推荐几个北京的旅游景点",
+      "expected_output": "",
+      "bucket": "库外",
+      "gold_scores": null
+    },
+    {
+      "index": 18,
+      "db_id": 32,
+      "input": "怎么用 Python 写爬虫",
+      "expected_output": "",
+      "bucket": "库外",
+      "gold_scores": null
+    },
+    {
+      "index": 19,
+      "db_id": 33,
+      "input": "股票怎么开户",
+      "expected_output": "",
+      "bucket": "库外",
+      "gold_scores": null
+    }
+  ]
+}

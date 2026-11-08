@@ -1,0 +1,267 @@
+{
+  "name": "baby-ai 端到端 v2",
+  "description": "20 条,含梯度(Ch28 阈值校准用)",
+  "source": "evalflow data/eval.db · datasets.id=3",
+  "exported_at": "2026-10-18",
+  "dataset_hash": "51f2835e21bdd4dbdeafc738435ba4b2",
+  "item_count": 20,
+  "hash_note": "dataset_hash = backend.snapshot.content_hash([{input,expected_output,bucket}...]),与 Run.config.dataset_hash 同一算法",
+  "items": [
+    {
+      "index": 1,
+      "db_id": 14,
+      "input": "宝宝发烧38度怎么办",
+      "expected_output": "物理降温/退烧药/就医",
+      "bucket": "护理",
+      "gold_scores": {
+        "faithfulness": 0.35,
+        "context_precision": 0.3,
+        "context_recall": 0.5,
+        "answer_relevance": 0.95,
+        "answer_correctness": 0.85
+      }
+    },
+    {
+      "index": 2,
+      "db_id": 15,
+      "input": "宝宝拉肚子怎么办",
+      "expected_output": "补水/脱水/就医",
+      "bucket": "护理",
+      "gold_scores": {
+        "faithfulness": 0.65,
+        "context_precision": 0.35,
+        "context_recall": 0.4,
+        "answer_relevance": 0.95,
+        "answer_correctness": 0.9
+      }
+    },
+    {
+      "index": 3,
+      "db_id": 16,
+      "input": "宝宝咳嗽有痰怎么办",
+      "expected_output": "化痰/就医/护理",
+      "bucket": "护理",
+      "gold_scores": {
+        "faithfulness": 0.2,
+        "context_precision": 0.4,
+        "context_recall": 0.3,
+        "answer_relevance": 0.85,
+        "answer_correctness": 0.6
+      }
+    },
+    {
+      "index": 4,
+      "db_id": 17,
+      "input": "宝宝便秘怎么办",
+      "expected_output": "揉腹/纤维/就医",
+      "bucket": "护理",
+      "gold_scores": {
+        "faithfulness": 0.5,
+        "context_precision": 0.5,
+        "context_recall": 0.5,
+        "answer_relevance": 0.9,
+        "answer_correctness": 0.75
+      }
+    },
+    {
+      "index": 5,
+      "db_id": 18,
+      "input": "宝宝吐奶怎么办",
+      "expected_output": "拍嗝/竖抱/生理性",
+      "bucket": "喂养",
+      "gold_scores": {
+        "faithfulness": 0.75,
+        "context_precision": 0.7,
+        "context_recall": 0.85,
+        "answer_relevance": 0.95,
+        "answer_correctness": 0.9
+      }
+    },
+    {
+      "index": 6,
+      "db_id": 19,
+      "input": "宝宝肠绞痛怎么缓解",
+      "expected_output": "飞机抱/揉腹/哭闹",
+      "bucket": "喂养",
+      "gold_scores": {
+        "faithfulness": 0.25,
+        "context_precision": 0.35,
+        "context_recall": 0.3,
+        "answer_relevance": 0.9,
+        "answer_correctness": 0.8
+      }
+    },
+    {
+      "index": 7,
+      "db_id": 20,
+      "input": "6个月宝宝能加辅食吗",
+      "expected_output": "满6个月/铁米粉/菜泥",
+      "bucket": "喂养",
+      "gold_scores": {
+        "faithfulness": 0.45,
+        "context_precision": 0.4,
+        "context_recall": 0.4,
+        "answer_relevance": 0.95,
+        "answer_correctness": 0.95
+      }
+    },
+    {
+      "index": 8,
+      "db_id": 21,
+      "input": "宝宝湿疹怎么护理",
+      "expected_output": "保湿/润肤霜/水温",
+      "bucket": "皮肤",
+      "gold_scores": {
+        "faithfulness": 0.4,
+        "context_precision": 0.25,
+        "context_recall": 0.25,
+        "answer_relevance": 0.9,
+        "answer_correctness": 0.9
+      }
+    },
+    {
+      "index": 9,
+      "db_id": 22,
+      "input": "宝宝红屁屁怎么办",
+      "expected_output": "勤换尿布/氧化锌/干燥",
+      "bucket": "皮肤",
+      "gold_scores": {
+        "faithfulness": 0.7,
+        "context_precision": 0.6,
+        "context_recall": 0.85,
+        "answer_relevance": 0.95,
+        "answer_correctness": 0.95
+      }
+    },
+    {
+      "index": 10,
+      "db_id": 23,
+      "input": "疫苗后发烧怎么办",
+      "expected_output": "观察/38.5度/就医",
+      "bucket": "疫苗",
+      "gold_scores": {
+        "faithfulness": 0.8,
+        "context_precision": 0.85,
+        "context_recall": 0.85,
+        "answer_relevance": 0.95,
+        "answer_correctness": 0.95
+      }
+    },
+    {
+      "index": 11,
+      "db_id": 24,
+      "input": "娃夜里老闹腾不睡觉咋办",
+      "expected_output": "出牙/睡眠倒退/环境",
+      "bucket": "睡眠",
+      "gold_scores": {
+        "faithfulness": 0.25,
+        "context_precision": 0.4,
+        "context_recall": 0.35,
+        "answer_relevance": 0.9,
+        "answer_correctness": 0.8
+      }
+    },
+    {
+      "index": 12,
+      "db_id": 25,
+      "input": "小宝宝身上起红点点是啥",
+      "expected_output": "湿疹/痱子/就医",
+      "bucket": "皮肤",
+      "gold_scores": {
+        "faithfulness": 0.3,
+        "context_precision": 0.35,
+        "context_recall": 0.4,
+        "answer_relevance": 0.95,
+        "answer_correctness": 0.85
+      }
+    },
+    {
+      "index": 13,
+      "db_id": 26,
+      "input": "孩子打完针发烧了要紧吗",
+      "expected_output": "常见反应/38.5度/就医",
+      "bucket": "疫苗",
+      "gold_scores": {
+        "faithfulness": 0.55,
+        "context_precision": 0.5,
+        "context_recall": 0.5,
+        "answer_relevance": 0.95,
+        "answer_correctness": 0.9
+      }
+    },
+    {
+      "index": 14,
+      "db_id": 27,
+      "input": "母乳宝宝大便稀稀的正常不",
+      "expected_output": "正常/体重/母乳",
+      "bucket": "排便",
+      "gold_scores": {
+        "faithfulness": 0.0,
+        "context_precision": 0.2,
+        "context_recall": 0.65,
+        "answer_relevance": 0.0,
+        "answer_correctness": 0.0
+      }
+    },
+    {
+      "index": 15,
+      "db_id": 28,
+      "input": "宝宝半夜突然哭醒哄不好",
+      "expected_output": "肠绞痛/出牙/就医",
+      "bucket": "睡眠",
+      "gold_scores": {
+        "faithfulness": 0.25,
+        "context_precision": 0.35,
+        "context_recall": 0.35,
+        "answer_relevance": 0.9,
+        "answer_correctness": 0.8
+      }
+    },
+    {
+      "index": 16,
+      "db_id": 29,
+      "input": "九个多月还不会爬正常吗",
+      "expected_output": "个体差异/发育/就医",
+      "bucket": "发育",
+      "gold_scores": {
+        "faithfulness": 0.6,
+        "context_precision": 0.7,
+        "context_recall": 0.75,
+        "answer_relevance": 0.95,
+        "answer_correctness": 0.9
+      }
+    },
+    {
+      "index": 17,
+      "db_id": 30,
+      "input": "如何给汽车换轮胎",
+      "expected_output": "",
+      "bucket": "库外",
+      "gold_scores": null
+    },
+    {
+      "index": 18,
+      "db_id": 31,
+      "input": "推荐几个北京的旅游景点",
+      "expected_output": "",
+      "bucket": "库外",
+      "gold_scores": null
+    },
+    {
+      "index": 19,
+      "db_id": 32,
+      "input": "怎么用 Python 写爬虫",
+      "expected_output": "",
+      "bucket": "库外",
+      "gold_scores": null
+    },
+    {
+      "index": 20,
+      "db_id": 33,
+      "input": "股票怎么开户",
+      "expected_output": "",
+      "bucket": "库外",
+      "gold_scores": null
+    }
+  ]
+}

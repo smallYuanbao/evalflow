@@ -1,0 +1,19 @@
+{
+  "name": "baby-ai 知识缺口 v1",
+  "description": "知识库没有依据的主题。正确行为：说明资料不足或拒答，而不是用通用知识硬答。分桶填“库外”以复用拒答评分（只评 rejection，不评 recall/judge）。",
+  "source": "从 baby-ai 端到端 v2 拆出 item 19",
+  "exported_at": "2026-10-18",
+  "dataset_hash": "2a201decd2f971470d761e2e8e35d590",
+  "item_count": 1,
+  "hash_note": "dataset_hash = backend.snapshot.content_hash([{input,expected_output,bucket}...])",
+  "items": [
+    {
+      "index": 1,
+      "db_id": 19,
+      "input": "宝宝肠绞痛怎么缓解",
+      "expected_output": "",
+      "bucket": "库外",
+      "gold_scores": null
+    }
+  ]
+}
