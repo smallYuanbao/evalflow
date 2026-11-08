@@ -16,14 +16,21 @@ from backend.config import settings
 
 logger = logging.getLogger(__name__)
 
-_client = OpenAI(api_key=settings.chat_api_key, base_url=settings.chat_base_url,
-                 timeout=settings.chat_timeout)
+# CI / 单测只 import 模块，不会真的调模型；没有 key 时不能在这里抛异常，
+# 否则 pytest 连收集都过不了。空 key 用占位符构造，真正调用时由 API 层返回 401。
+_PLACEHOLDER_API_KEY = "missing-api-key"
+
+_client = OpenAI(
+    api_key=settings.chat_api_key or _PLACEHOLDER_API_KEY,
+    base_url=settings.chat_base_url,
+    timeout=settings.chat_timeout,
+)
 
 # 裁判可以单独指向另一个模型/供应商(Ch30):留空就回退到上面那套,行为不变。
 # 为什么要分开:Ch28 实测「换个裁判,context_recall 差 0.31,而门禁容忍度只有 0.05」——
 # 裁判模型是测量仪器,必须能单独换(做 A/B),也必须能单独记(写进快照)。
 _judge_client = OpenAI(
-    api_key=settings.judge_api_key or settings.chat_api_key,
+    api_key=settings.judge_api_key or settings.chat_api_key or _PLACEHOLDER_API_KEY,
     base_url=settings.judge_base_url or settings.chat_base_url,
     timeout=settings.chat_timeout,
 )
