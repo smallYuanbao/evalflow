@@ -27,9 +27,20 @@ def config_retrieval(config_str: str) -> str:
     """从 config 取检索方式,缺省/非法回退 hybrid(Ch16 兼容老 run 无该字段)。"""
     try:
         v = json.loads(config_str or "{}").get("retrieval", "hybrid")
-        return v if v in ("dense", "hybrid") else "hybrid"
+        return v if v in ("dense", "bm25", "hybrid") else "hybrid"
     except (TypeError, ValueError, json.JSONDecodeError):
         return "hybrid"
+
+
+def effective_retrieval(requested: str, external: dict) -> str:
+    """外部被测系统自己决定检索策略时,以它的 /api/meta 为准。
+
+    ecom 的 `top_k` / `retrieval` 参数不生效(见 external_ecom 文档),如果
+    快照继续记请求值,历史 run 会全部标成 hybrid,而实际跑的是 dense——
+    "这次用哪种检索"这个复现字段就失真了。
+    """
+    actual = (external.get("meta") or {}).get("retrieval_strategy")
+    return actual if actual in ("dense", "bm25", "hybrid") else requested
 
 
 def content_hash(items: list[dict]) -> str:
@@ -77,10 +88,12 @@ def build_snapshot(dataset_id: int, top_k: int, retrieval: str = "hybrid") -> di
     s.close()
     items = [{"input": i, "expected_output": e, "bucket": b} for i, e, b in rows]
 
+    external = _external_snapshot()  # Ch26:被测系统(外部)的状态
     return {
         "top_k": top_k,
-        "retrieval": retrieval,  # Ch16:dense|hybrid,记录「这次用哪种检索跑出来的」
-        "external": _external_snapshot(),  # Ch26:被测系统(外部)的状态
+        # Ch16:记录「这次用哪种检索跑出来的」;外部系统自己决定时以它的 meta 为准
+        "retrieval": effective_retrieval(retrieval, external),
+        "external": external,
         "knowledge_version": KNOWLEDGE_VERSION,
         "knowledge_hash": content_hash(KNOWLEDGE),
         "pipeline_prompt_version": PIPELINE_PROMPT_VERSION,

@@ -32,8 +32,37 @@ def test_config_top_k_clamps_out_of_range():
 def test_config_retrieval_parse_and_fallback():
     assert snapshot.config_retrieval("{}") == "hybrid"                 # 缺省回退 hybrid
     assert snapshot.config_retrieval('{"retrieval": "dense"}') == "dense"
+    assert snapshot.config_retrieval('{"retrieval": "bm25"}') == "bm25"
     assert snapshot.config_retrieval('{"retrieval": "bogus"}') == "hybrid"  # 非法值回退
     assert snapshot.config_retrieval("not json") == "hybrid"           # 解析失败回退
+
+
+def test_effective_retrieval_prefers_external_meta():
+    # 外部系统自己决定检索:ecom 实际 dense,不能被请求默认值 hybrid 覆盖
+    external = {"meta": {"retrieval_strategy": "dense"}}
+    assert snapshot.effective_retrieval("hybrid", external) == "dense"
+    # 外部没报或报了非法值 → 保留请求值
+    assert snapshot.effective_retrieval("hybrid", {}) == "hybrid"
+    assert snapshot.effective_retrieval("dense", {"meta": {"retrieval_strategy": "x"}}) == "dense"
+
+
+def test_build_snapshot_uses_external_retrieval(monkeypatch):
+    init_db()
+    s = SessionLocal()
+    ds = Dataset(name="t-ext", description="")
+    s.add(ds)
+    s.flush()
+    s.add(DatasetItem(dataset_id=ds.id, input="q", expected_output="a/b", bucket="x"))
+    s.commit()
+    did = ds.id
+    s.close()
+
+    monkeypatch.setattr(
+        snapshot, "_external_snapshot",
+        lambda: {"target": "ecom", "meta": {"retrieval_strategy": "dense"}},
+    )
+    snap = snapshot.build_snapshot(did, top_k=3, retrieval="hybrid")
+    assert snap["retrieval"] == "dense"
 
 
 def test_build_snapshot_fields_and_dataset_hash():
