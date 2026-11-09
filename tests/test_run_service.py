@@ -14,7 +14,7 @@ JUDGES = {
 }
 
 INBUCKET = set(JUDGES) | {"recall", "hit_at_k", "mrr"}  # 有检索上下文:机械指标 + 5 个 judge
-NO_CONTEXT = {"recall", "hit_at_k", "mrr", "answer_relevance", "answer_correctness"}
+NO_CONTEXT = {"answer_relevance", "answer_correctness"}
 ABSENT = {"rejection"}               # 库外题:只评拒答
 
 
@@ -127,15 +127,9 @@ def test_execute_run_absent_bucket(monkeypatch):
             assert s.query(Score).filter(Score.trace_id == tr.id).first().value == 1.0
         else:
             # 非库外但检索上下文为 "(无证据)"：跳过 context/faithfulness，
-            # 机械指标记 NULL。
+            # 机械指标也不写行（不适用 ≠ 失败），只有答案级 judge。
             assert names == NO_CONTEXT
-            values = {
-                sc.name: sc.value
-                for sc in s.query(Score).filter(Score.trace_id == tr.id)
-            }
-            assert values["recall"] is None
-            assert values["hit_at_k"] is None
-            assert values["mrr"] is None
+            assert not names & {"recall", "hit_at_k", "mrr"}
     s.close()
 
 

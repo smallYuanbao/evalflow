@@ -222,18 +222,17 @@ def _process_item(run_id: int, item_id: int, input_: str, expected_output: str,
         s.add(Score(trace_id=tr.id, name="rejection", value=rejection_value,
                     comment=rejection_comment))
     else:
-        # 机械指标：无检索上下文时记 NULL，不记 0。
-        # 「没有检索」和「检索了但没命中」是两件事。
-        no_context_comment = "" if has_context else "无检索上下文"
-        s.add(Score(trace_id=tr.id, name="recall",
-                    value=recall(expected_output, context),
-                    comment=no_context_comment))
-        s.add(Score(trace_id=tr.id, name="hit_at_k",
-                    value=hit_at_k(expected_output, out["hits"]),
-                    comment=no_context_comment))
-        s.add(Score(trace_id=tr.id, name="mrr",
-                    value=mrr(expected_output, out["hits"]),
-                    comment=no_context_comment))
+        # 机械指标只写「适用」的样本：B2–B7 没有回答证据，
+        # 不写 recall / hit@k / MRR 行，而不是写 NULL。
+        # 这样 score_coverage 才是「10/10 评上了」，不会被读成「44 条漏了 34 条」。
+        # C 出口可能检索到 policy，但那些 hits 不是回答证据，同样不算。
+        if has_context:
+            s.add(Score(trace_id=tr.id, name="recall",
+                        value=recall(expected_output, context)))
+            s.add(Score(trace_id=tr.id, name="hit_at_k",
+                        value=hit_at_k(expected_output, out["hits"])))
+            s.add(Score(trace_id=tr.id, name="mrr",
+                        value=mrr(expected_output, out["hits"])))
         for name, r in judges:
             if r is None:
                 s.add(Score(trace_id=tr.id, name=name, value=None, comment="judge 失败"))

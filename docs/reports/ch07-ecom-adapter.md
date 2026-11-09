@@ -41,9 +41,48 @@ DATABASE_URL=sqlite+aiosqlite:///./data/eval.db \
 uv run uvicorn app.main:app --port 8081
 ```
 
+## run-01（ecom 44 条）
+
+| 指标 | 值 | 覆盖 |
+|---|---|---|
+| recall | 0.95 | 10 / 44 |
+| hit_at_k / MRR | 1.00 / 1.00 | 10 / 44 |
+| context_precision | 0.91 | 10 / 10 |
+| context_recall | 0.90 | 10 / 10 |
+| faithfulness | 1.00 | 10 / 10 |
+| answer_relevance | 0.8614 | 44 / 44 |
+| answer_correctness | 0.9818 | 44 / 44 |
+
+分桶：
+
+| 桶 | answer_relevance | answer_correctness |
+|---|---|---|
+| B1 | 0.99 | 0.92 |
+| B2 | 1.00 | 1.00 |
+| B3 | 0.90 | 1.00 |
+| B4 | 0.97 | 1.00 |
+| B5 | 0.625 | 1.00 |
+| B6 | 0.525 | 1.00 |
+| B7 | 0.60 | 1.00 |
+
+### 两个指标口径修正
+
+1. **hit@k / MRR 只对有回答证据的出口算**：B3/B4 的 policy 检索不算回答证据；
+   无 context 时**不写评分行**（不适用 ≠ 失败），覆盖率会显示 `10 / 10`，
+   不再出现 `10 / 44` 这种容易被误读成漏测的口径。
+2. **judge 认识 `/` 与 `|`**：context_recall / answer_correctness 的 prompt
+   明确 `/` 分组、`|` 任选。
+
+### 低分说明
+
+- B1 `退货政策是什么`：回答缺 7 天窗口，answer_correctness 0.3；
+- B5–B7 answer_relevance 低：转人工/拒答是正确行为，不应按普通问答解读。
+
 ## 验证
 
 - `uv run pytest tests/test_external_ecom.py tests/test_evaluators.py tests/test_run_service.py -q` → 34 passed
 - 全量 → **126 passed**
 - 真实联调：`run_pipeline_ecom("退货政策是什么")` 返回 answer + 5 hits + 811 字 context；
   `fetch_meta()` 返回 `kb_version` / `chat_model` / `prompt_version`
+- run #31：44/44 完成，指标见上
+- 覆盖率口径改为「不适用不写行」后未重跑；下一轮 run-02 会显示 `10 / 10`
